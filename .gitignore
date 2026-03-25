@@ -1,0 +1,9 @@
+node_modules/
+build/
+dist/
+.svelte-kit/
+src-tauri/target/
+*.swp
+*.swo
+.DS_Store
+app-icon.png
