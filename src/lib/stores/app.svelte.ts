@@ -27,6 +27,7 @@ let snapDistance = $state(5);
 let focusMode = $state(false);
 let lightboxElementId = $state<string | null>(null);
 let roundedCorners = $state(true);
+let zoomSensitivity = $state(5); // 1-10, maps to zoom factor
 let imageContextMenu = $state<{ x: number; y: number; elementId: string } | null>(null);
 
 // ── Derived ─────────────────────────────────────────────────
@@ -51,6 +52,7 @@ async function loadAppState(): Promise<void> {
 		if (state.animateGifs !== undefined) animateGifs = state.animateGifs;
 		if (state.roundedCorners !== undefined) roundedCorners = state.roundedCorners;
 		if (state.sidebarCollapsed !== undefined) sidebarCollapsed = state.sidebarCollapsed;
+		if ((state as any).zoomSensitivity !== undefined) zoomSensitivity = (state as any).zoomSensitivity;
 
 		if (state.lastProjectId && projects.some((p) => p.id === state.lastProjectId)) {
 			activeProjectId = state.lastProjectId;
@@ -88,7 +90,7 @@ const debouncedSave = debounce(async () => {
 		await invoke('save_app_state', {
 			state: {
 				lastProjectId: activeProjectId, theme,
-				snapEnabled, snapDistance, animateGifs, roundedCorners, sidebarCollapsed
+				snapEnabled, snapDistance, animateGifs, roundedCorners, sidebarCollapsed, zoomSensitivity
 			} as AppState
 		});
 	} catch (e) {
@@ -302,6 +304,7 @@ function setTool(tool: Tool): void {
 function setShapeColor(color: string): void { shapeColor = color; }
 function toggleSidebar(): void { sidebarCollapsed = !sidebarCollapsed; }
 function toggleAnimateGifs(): void { animateGifs = !animateGifs; }
+function setZoomSensitivity(v: number): void { zoomSensitivity = Math.max(1, Math.min(10, v)); }
 function toggleSnap(): void { snapEnabled = !snapEnabled; }
 function setSnapDistance(d: number): void { snapDistance = Math.max(1, Math.min(50, d)); }
 function toggleFocusMode(): void { focusMode = !focusMode; }
@@ -427,6 +430,7 @@ export const appStore = {
 	get animateGifs() { return animateGifs; },
 	get snapEnabled() { return snapEnabled; },
 	get snapDistance() { return snapDistance; },
+	get zoomSensitivity() { return zoomSensitivity; },
 	get focusMode() { return focusMode; },
 	get lightboxElementId() { return lightboxElementId; },
 	get lightboxElement() { return lightboxElementId ? elements.find(e => e.id === lightboxElementId) ?? null : null; },
@@ -440,7 +444,7 @@ export const appStore = {
 	addElement, updateElement, updateSelectedElements, removeElement, removeSelectedElements,
 	bringToFront, selectElement, isSelected,
 	setTool, setShapeColor, toggleSidebar, toggleAnimateGifs,
-	toggleSnap, setSnapDistance, snapPosition,
+	toggleSnap, setSnapDistance, setZoomSensitivity, snapPosition,
 	toggleFocusMode, toggleRoundedCorners, openLightbox, closeLightbox, toggleAlwaysOnTop, openImageContextMenu, closeImageContextMenu,
 	saveViewport, getViewport,
 	setTheme, toggleSettings, exportMoo, importMoo

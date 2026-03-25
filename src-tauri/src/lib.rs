@@ -344,22 +344,16 @@ fn install_desktop_file(app: tauri::AppHandle) -> Result<String, String> {
             return Err("Could not determine executable path".to_string());
         }
 
-        // Save icon to a stable location
+        // Save embedded icon to a stable location
         let icon_dir = dirs::data_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
             .join("simple-moodboard");
         fs::create_dir_all(&icon_dir).ok();
         let icon_path = icon_dir.join("icon.png");
 
-        // Extract icon from app resources if possible, otherwise use a placeholder
-        let resource_path = app.path().resource_dir().ok();
-        let source_icon = resource_path.as_ref().and_then(|r| {
-            let p = r.join("icons/128x128.png");
-            if p.exists() { Some(p) } else { None }
-        });
-        if let Some(src) = source_icon {
-            fs::copy(&src, &icon_path).ok();
-        }
+        // Embed the 128x128 icon at compile time
+        let icon_bytes = include_bytes!("../icons/128x128.png");
+        fs::write(&icon_path, icon_bytes).ok();
 
         let desktop_content = format!(
             "[Desktop Entry]\n\
