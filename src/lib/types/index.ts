@@ -31,7 +31,7 @@ export interface Vibe {
 
 export interface CanvasElement {
 	id: string;
-	type: 'image' | 'arrow' | 'circle';
+	type: 'image' | 'arrow' | 'circle' | 'text';
 	x: number;
 	y: number;
 	width: number;
@@ -39,7 +39,7 @@ export interface CanvasElement {
 	zIndex: number;
 	rotation?: number;
 	alwaysOnTop?: boolean;
-	data: MoodImageData | ArrowData | CircleData;
+	data: MoodImageData | ArrowData | CircleData | TextData;
 }
 
 export interface MoodImageData {
@@ -59,5 +59,13 @@ export interface CircleData {
 	fill: string;
 }
 
-export type Tool = 'select' | 'arrow' | 'circle';
+export interface TextData {
+	text: string;
+	fontSize: number;
+	fontFamily: string;
+	color: string;
+	align: 'left' | 'center' | 'right';
+}
+
+export type Tool = 'select' | 'arrow' | 'circle' | 'text';
 export type Theme = 'light' | 'dark';

@@ -5,10 +5,11 @@
 	import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 	import { generateId, now } from '$lib/utils/ids';
 	import { debounce } from '$lib/utils/debounce';
-	import type { CanvasElement, ArrowData, CircleData } from '$lib/types';
+	import type { CanvasElement, ArrowData, CircleData, TextData } from '$lib/types';
 	import ImageElement from './ImageElement.svelte';
 	import ArrowElement from './ArrowElement.svelte';
 	import CircleElement from './CircleElement.svelte';
+	import TextElement from './TextElement.svelte';
 
 	const CANVAS_SIZE = 5000;
 
@@ -107,7 +108,27 @@
 			return;
 		}
 
-		// Drawing tools
+		// Text tool: single click creates a text element
+		if (appStore.activeTool === 'text' && isCanvas) {
+			e.preventDefault();
+			const pos = getCanvasPos(e);
+			const maxZ = Math.max(...(appStore.elements.map((el) => el.zIndex) ?? [0]), 0);
+			const element: CanvasElement = {
+				id: generateId(),
+				type: 'text',
+				x: pos.x,
+				y: pos.y,
+				width: 200,
+				height: 40,
+				zIndex: maxZ + 1,
+				data: { text: 'Text', fontSize: 24, fontFamily: 'Inter, sans-serif', color: appStore.shapeColor, align: 'left' } as TextData
+			};
+			appStore.addElement(element);
+			appStore.setTool('select');
+			return;
+		}
+
+		// Drawing tools (arrow, circle)
 		if (appStore.activeTool !== 'select' && isCanvas) {
 			e.preventDefault();
 			const pos = getCanvasPos(e);
@@ -438,6 +459,8 @@
 				<ArrowElement {element} />
 			{:else if element.type === 'circle'}
 				<CircleElement {element} />
+			{:else if element.type === 'text'}
+				<TextElement {element} />
 			{/if}
 		{/each}
 

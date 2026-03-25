@@ -5,14 +5,16 @@
 	const tools: { id: Tool; label: string; icon: string }[] = [
 		{ id: 'select', label: 'Select (V)', icon: 'cursor' },
 		{ id: 'arrow', label: 'Arrow (A)', icon: 'arrow' },
-		{ id: 'circle', label: 'Circle (C)', icon: 'circle' }
+		{ id: 'circle', label: 'Circle (C)', icon: 'circle' },
+		{ id: 'text', label: 'Text (T)', icon: 'text' }
 	];
 
 	function handleKeydown(e: KeyboardEvent) {
-		if (e.target instanceof HTMLInputElement) return;
+		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 		if (e.key === 'v' || e.key === 'V') appStore.setTool('select');
 		if (e.key === 'a' || e.key === 'A') appStore.setTool('arrow');
 		if (e.key === 'c' || e.key === 'C') appStore.setTool('circle');
+		if (e.key === 't' || e.key === 'T') appStore.setTool('text');
 	}
 </script>
 
@@ -32,6 +34,8 @@
 					<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
 				{:else if tool.icon === 'circle'}
 					<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+				{:else if tool.icon === 'text'}
+					<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
 				{/if}
 			</button>
 		{/each}
