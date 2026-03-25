@@ -18,6 +18,7 @@
 	}
 
 	function handleMouseDown(e: MouseEvent) {
+		if (e.button === 1) return;
 		if (appStore.activeTool !== 'select') return;
 		e.stopPropagation();
 		e.preventDefault();
