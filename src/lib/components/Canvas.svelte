@@ -106,11 +106,9 @@
 
 		if (e.button !== 0) return;
 
-		const target = e.target as HTMLElement;
-		const isCanvas = target.dataset.canvas === 'true' || target === viewport;
-
-		// Ctrl+drag on canvas = marquee selection
-		if (appStore.activeTool === 'select' && isCanvas && (e.ctrlKey || e.metaKey)) {
+		// If the event reached here, it wasn't stopped by an element — we're on canvas
+		// Ctrl+drag = marquee selection
+		if (appStore.activeTool === 'select' && (e.ctrlKey || e.metaKey)) {
 			e.preventDefault();
 			marqueeSelecting = true;
 			const pos = getCanvasPos(e);
@@ -122,7 +120,7 @@
 		}
 
 		// Normal drag on canvas = pan
-		if (appStore.activeTool === 'select' && isCanvas) {
+		if (appStore.activeTool === 'select') {
 			e.preventDefault();
 			panning = true;
 			panStart = { x: e.clientX, y: e.clientY, panX, panY };
@@ -132,7 +130,7 @@
 		}
 
 		// Text tool: single click creates a text element
-		if (appStore.activeTool === 'text' && isCanvas) {
+		if (appStore.activeTool === 'text') {
 			e.preventDefault();
 			const pos = getCanvasPos(e);
 			const maxZ = Math.max(...(appStore.elements.map((el) => el.zIndex) ?? [0]), 0);
@@ -152,7 +150,7 @@
 		}
 
 		// Drawing tools (arrow, circle)
-		if (appStore.activeTool !== 'select' && isCanvas) {
+		if (appStore.activeTool !== 'select' && appStore.activeTool !== 'text') {
 			e.preventDefault();
 			const pos = getCanvasPos(e);
 			drawing = true;
