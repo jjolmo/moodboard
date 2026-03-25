@@ -25,6 +25,7 @@
 	];
 
 	function handleMouseDown(e: MouseEvent) {
+		if (e.button === 1) return;
 		if (appStore.activeTool !== 'select' || editing) return;
 		e.stopPropagation(); e.preventDefault();
 		appStore.closeImageContextMenu();

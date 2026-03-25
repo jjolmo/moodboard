@@ -13,6 +13,7 @@
 	let resizeStart = $state({ x: 0, y: 0, w: 0, h: 0, elemX: 0, elemY: 0 });
 
 	function handleMouseDown(e: MouseEvent) {
+		if (e.button === 1) return;
 		if (appStore.activeTool !== 'select') return;
 		e.stopPropagation();
 		e.preventDefault();

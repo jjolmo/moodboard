@@ -42,6 +42,7 @@
 	}
 
 	function handleMouseDown(e: MouseEvent) {
+		if (e.button === 1) return; // middle click reserved for pan
 		if (appStore.activeTool !== 'select') return;
 		e.stopPropagation(); e.preventDefault();
 		appStore.closeImageContextMenu();
