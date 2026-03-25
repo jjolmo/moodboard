@@ -13,6 +13,18 @@
 
 	const CANVAS_SIZE = 5000;
 
+	async function getImageSize(projectId: string, filename: string): Promise<{w: number; h: number}> {
+		try {
+			const src: string = await invoke('get_image_base64', { projectId, filename });
+			return new Promise((resolve) => {
+				const img = new Image();
+				img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+				img.onerror = () => resolve({ w: 300, h: 200 });
+				img.src = src;
+			});
+		} catch { return { w: 300, h: 200 }; }
+	}
+
 	let viewport = $state<HTMLElement | null>(null);
 	let isDragOver = $state(false);
 	let drawing = $state(false);
@@ -64,7 +76,8 @@
 		const canvasX = (mx - panX) / zoom;
 		const canvasY = (my - panY) / zoom;
 
-		const factor = e.deltaY > 0 ? 0.95 : 1.05;
+		const s = 1 + appStore.zoomSensitivity * 0.01; // 1.01 to 1.10
+		const factor = e.deltaY > 0 ? 1 / s : s;
 		const newZoom = Math.min(5, Math.max(0.05, zoom * factor));
 
 		// Adjust pan so the canvas point under cursor stays fixed
@@ -187,12 +200,13 @@
 		const ids: string[] = [];
 		for (const el of appStore.elements) {
 			const ex = el.x, ey = el.y, ew = el.width, eh = el.height;
-			// Check overlap
 			if (ex + ew > x1 && ex < x2 && ey + eh > y1 && ey < y2) {
 				ids.push(el.id);
 			}
 		}
 		if (ids.length > 0) {
+			// Clear then add all — don't toggle
+			appStore.selectElement(null);
 			for (const id of ids) {
 				appStore.selectElement(id, true);
 			}
@@ -233,15 +247,16 @@
 								sourcePath: filePath,
 								projectId: appStore.activeProjectId
 							});
+							const size = await getImageSize(appStore.activeProjectId!, filename);
 
 							const maxZ = Math.max(...(appStore.elements.map((el) => el.zIndex) ?? [0]), 0);
 							const element: CanvasElement = {
 								id: generateId(),
 								type: 'image',
-								x: dropX + (i % 4) * 320 + Math.floor(i / 4) * 30,
-								y: dropY + Math.floor(i / 4) * 220 + (i % 4) * 15,
-								width: 300,
-								height: 200,
+								x: dropX + (i % 4) * (size.w + 20) + Math.floor(i / 4) * 30,
+								y: dropY + Math.floor(i / 4) * (size.h + 20) + (i % 4) * 15,
+								width: size.w,
+								height: size.h,
 								zIndex: maxZ + 1 + i,
 								data: { filename }
 							};
@@ -290,6 +305,7 @@
 					sourcePath: filePath,
 					projectId: appStore.activeProjectId
 				});
+				const size = await getImageSize(appStore.activeProjectId!, filename);
 
 				const maxZ = Math.max(...(appStore.elements.map((el) => el.zIndex) ?? [0]), 0);
 				const element: CanvasElement = {
@@ -297,8 +313,8 @@
 					type: 'image',
 					x: dropX + i * 20,
 					y: dropY + i * 20,
-					width: 300,
-					height: 200,
+					width: size.w,
+					height: size.h,
 					zIndex: maxZ + 1 + i,
 					data: { filename }
 				};
