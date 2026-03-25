@@ -4,6 +4,8 @@
 
 	let updateStatus = $state<string>('');
 	let checking = $state(false);
+	let desktopStatus = $state<string>('');
+	const isLinux = navigator.userAgent.includes('Linux');
 
 	async function checkUpdates() {
 		checking = true;
@@ -100,6 +102,19 @@
 			</div>
 			{#if updateStatus}
 				<div style="margin-top:8px;font-size:12px;color:var(--text-muted);text-align:center;">{updateStatus}</div>
+			{/if}
+			{#if isLinux}
+				<button class="btn-secondary" style="width:100%;margin-top:8px" onclick={async () => {
+					try {
+						const msg = await invoke('install_desktop_file');
+						desktopStatus = String(msg);
+					} catch (e) { desktopStatus = 'Failed: ' + e; }
+				}}>
+					Install .desktop shortcut
+				</button>
+				{#if desktopStatus}
+					<div style="margin-top:6px;font-size:11px;color:var(--text-muted);text-align:center;">{desktopStatus}</div>
+				{/if}
 			{/if}
 		</div>
 
