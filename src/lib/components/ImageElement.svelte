@@ -1,0 +1,216 @@
+<script lang="ts">
+	import { appStore } from '$lib/stores/app.svelte';
+	import type { CanvasElement, MoodImageData } from '$lib/types';
+	import { invoke } from '@tauri-apps/api/core';
+
+	let { element, scrollContainer }: { element: CanvasElement; scrollContainer: HTMLElement | null } = $props();
+
+	let imageSrc = $state('');
+	let staticSrc = $state('');
+	let dragging = $state(false);
+	let resizing = $state<string | null>(null);
+	let rotating = $state(false);
+	let dragStart = $state({ x: 0, y: 0, elemX: 0, elemY: 0 });
+	let resizeStart = $state({ x: 0, y: 0, w: 0, h: 0, elemX: 0, elemY: 0 });
+	let rotateStart = $state({ angle: 0, mouseAngle: 0 });
+
+	const isSelected = $derived(appStore.isSelected(element.id));
+	const data = $derived(element.data as MoodImageData);
+	const isGif = $derived(data.filename?.toLowerCase().endsWith('.gif') ?? false);
+	const displaySrc = $derived(isGif && !appStore.animateGifs && staticSrc ? staticSrc : imageSrc);
+	const rotation = $derived(element.rotation ?? 0);
+
+	$effect(() => { loadImage(); });
+
+	async function loadImage() {
+		if (!data.filename || !appStore.activeProjectId) return;
+		try {
+			imageSrc = await invoke('get_image_base64', {
+				projectId: appStore.activeProjectId, filename: data.filename
+			});
+			if (isGif && imageSrc) {
+				const img = new Image();
+				img.onload = () => {
+					const canvas = document.createElement('canvas');
+					canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+					canvas.getContext('2d')?.drawImage(img, 0, 0);
+					staticSrc = canvas.toDataURL('image/png');
+				};
+				img.src = imageSrc;
+			}
+		} catch (e) { console.error('Failed to load image:', e); }
+	}
+
+	function handleMouseDown(e: MouseEvent) {
+		if (appStore.activeTool !== 'select') return;
+		e.stopPropagation(); e.preventDefault();
+		appStore.closeImageContextMenu();
+		appStore.selectElement(element.id, e.ctrlKey || e.metaKey);
+		appStore.bringToFront(element.id);
+		dragging = true;
+		dragStart = { x: e.clientX, y: e.clientY, elemX: element.x, elemY: element.y };
+		window.addEventListener('mousemove', handleDragMove);
+		window.addEventListener('mouseup', handleDragEnd);
+	}
+
+	function handleDragMove(e: MouseEvent) {
+		if (!dragging) return;
+		const dx = e.clientX - dragStart.x;
+		const dy = e.clientY - dragStart.y;
+		let nx = Math.max(0, dragStart.elemX + dx);
+		let ny = Math.max(0, dragStart.elemY + dy);
+		if (!rotation) {
+			const snapped = appStore.snapPosition(element.id, nx, ny, element.width, element.height);
+			nx = snapped.x; ny = snapped.y;
+		}
+		appStore.updateElement(element.id, { x: nx, y: ny });
+	}
+
+	function handleDragEnd() {
+		dragging = false;
+		window.removeEventListener('mousemove', handleDragMove);
+		window.removeEventListener('mouseup', handleDragEnd);
+	}
+
+	function handleDblClick(e: MouseEvent) {
+		e.stopPropagation();
+		appStore.openLightbox(element.id);
+	}
+
+	function handleContextMenuEvt(e: MouseEvent) {
+		e.preventDefault(); e.stopPropagation();
+		appStore.openImageContextMenu(e.clientX, e.clientY, element.id);
+	}
+
+	// ── Resize ──────────────────────────────────────────────
+
+	function handleResizeStart(e: MouseEvent, handle: string) {
+		if (appStore.activeTool !== 'select') return;
+		e.stopPropagation(); e.preventDefault();
+		resizing = handle;
+		resizeStart = { x: e.clientX, y: e.clientY, w: element.width, h: element.height, elemX: element.x, elemY: element.y };
+		window.addEventListener('mousemove', handleResizeMove);
+		window.addEventListener('mouseup', handleResizeEnd);
+	}
+
+	function handleResizeMove(e: MouseEvent) {
+		if (!resizing) return;
+		const dx = e.clientX - resizeStart.x;
+		const dy = e.clientY - resizeStart.y;
+		const ar = resizeStart.w / resizeStart.h;
+		let nw = resizeStart.w, nh = resizeStart.h, nx = resizeStart.elemX, ny = resizeStart.elemY;
+		if (resizing.includes('e')) nw = Math.max(50, resizeStart.w + dx);
+		if (resizing.includes('w')) { nw = Math.max(50, resizeStart.w - dx); nx = resizeStart.elemX + (resizeStart.w - nw); }
+		if (resizing.includes('s')) nh = Math.max(50, resizeStart.h + dy);
+		if (resizing.includes('n')) { nh = Math.max(50, resizeStart.h - dy); ny = resizeStart.elemY + (resizeStart.h - nh); }
+		if (e.shiftKey || resizing.length === 2) {
+			if (Math.abs(dx) > Math.abs(dy)) {
+				nh = nw / ar;
+				if (resizing.includes('n')) ny = resizeStart.elemY + resizeStart.h - nh;
+			} else {
+				nw = nh * ar;
+				if (resizing.includes('w')) nx = resizeStart.elemX + resizeStart.w - nw;
+			}
+		}
+		appStore.updateElement(element.id, { x: Math.max(0, nx), y: Math.max(0, ny), width: nw, height: nh });
+	}
+
+	function handleResizeEnd() {
+		resizing = null;
+		window.removeEventListener('mousemove', handleResizeMove);
+		window.removeEventListener('mouseup', handleResizeEnd);
+	}
+
+	// ── Rotate ──────────────────────────────────────────────
+
+	function handleRotateStart(e: MouseEvent) {
+		e.stopPropagation(); e.preventDefault();
+		rotating = true;
+		const cx = element.x + element.width / 2;
+		const cy = element.y + element.height / 2;
+		// We need to figure out mouse angle in canvas space - approximate using viewport
+		const rect = scrollContainer?.getBoundingClientRect();
+		// This is approximate but works for the UX
+		rotateStart = { angle: rotation, mouseAngle: Math.atan2(e.clientY - ((rect?.top ?? 0) + cy), e.clientX - ((rect?.left ?? 0) + cx)) * 180 / Math.PI };
+		window.addEventListener('mousemove', handleRotateMove);
+		window.addEventListener('mouseup', handleRotateEnd);
+	}
+
+	function handleRotateMove(e: MouseEvent) {
+		if (!rotating) return;
+		const cx = element.x + element.width / 2;
+		const cy = element.y + element.height / 2;
+		const rect = scrollContainer?.getBoundingClientRect();
+		const currentAngle = Math.atan2(e.clientY - ((rect?.top ?? 0) + cy), e.clientX - ((rect?.left ?? 0) + cx)) * 180 / Math.PI;
+		let newRot = rotateStart.angle + (currentAngle - rotateStart.mouseAngle);
+		// Snap to 0/90/180/270 when within 5 degrees
+		for (const snap of [0, 90, 180, 270, -90, -180, -270, 360]) {
+			if (Math.abs(newRot - snap) < 5) { newRot = snap; break; }
+		}
+		appStore.updateElement(element.id, { rotation: newRot });
+	}
+
+	function handleRotateEnd() {
+		rotating = false;
+		window.removeEventListener('mousemove', handleRotateMove);
+		window.removeEventListener('mouseup', handleRotateEnd);
+	}
+</script>
+
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	class="absolute select-none"
+	style="left:{element.x}px; top:{element.y}px; width:{element.width}px; height:{element.height}px; z-index:{element.zIndex}; transform:rotate({rotation}deg); transform-origin:center center;"
+	onmousedown={handleMouseDown}
+	ondblclick={handleDblClick}
+	oncontextmenu={handleContextMenuEvt}
+>
+	{#if displaySrc}
+		<img src={displaySrc} alt="" draggable="false"
+			style="pointer-events:none; width:100%; height:100%; border-radius:{appStore.roundedCorners ? '6px' : '0'}; object-fit:cover; image-rendering:pixelated;" />
+	{:else}
+		<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;border-radius:{appStore.roundedCorners ? '6px' : '0'};background:var(--bg-tertiary);color:var(--text-muted);">
+			Loading...
+		</div>
+	{/if}
+
+	<!-- Always on top indicator -->
+	{#if element.alwaysOnTop}
+		<div style="position:absolute;top:4px;right:4px;background:var(--ui-accent);color:white;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700;pointer-events:none;">
+			TOP
+		</div>
+	{/if}
+
+	{#if isSelected}
+		<div style="position:absolute;inset:0;border-radius:4px;border:2px solid var(--ui-accent);pointer-events:none;"></div>
+
+		<!-- Corner resize handles -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div style="position:absolute;left:-5px;top:-5px;width:10px;height:10px;background:var(--ui-accent);border-radius:2px;cursor:nw-resize;" onmousedown={(e) => handleResizeStart(e, 'nw')}></div>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div style="position:absolute;right:-5px;top:-5px;width:10px;height:10px;background:var(--ui-accent);border-radius:2px;cursor:ne-resize;" onmousedown={(e) => handleResizeStart(e, 'ne')}></div>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div style="position:absolute;left:-5px;bottom:-5px;width:10px;height:10px;background:var(--ui-accent);border-radius:2px;cursor:sw-resize;" onmousedown={(e) => handleResizeStart(e, 'sw')}></div>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div style="position:absolute;right:-5px;bottom:-5px;width:10px;height:10px;background:var(--ui-accent);border-radius:2px;cursor:se-resize;" onmousedown={(e) => handleResizeStart(e, 'se')}></div>
+
+		<!-- Edge resize handles -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div style="position:absolute;top:-4px;left:50%;transform:translateX(-50%);width:20px;height:6px;background:var(--ui-accent);opacity:0.5;border-radius:3px;cursor:n-resize;" onmousedown={(e) => handleResizeStart(e, 'n')}></div>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div style="position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);width:20px;height:6px;background:var(--ui-accent);opacity:0.5;border-radius:3px;cursor:s-resize;" onmousedown={(e) => handleResizeStart(e, 's')}></div>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div style="position:absolute;left:-4px;top:50%;transform:translateY(-50%);width:6px;height:20px;background:var(--ui-accent);opacity:0.5;border-radius:3px;cursor:w-resize;" onmousedown={(e) => handleResizeStart(e, 'w')}></div>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div style="position:absolute;right:-4px;top:50%;transform:translateY(-50%);width:6px;height:20px;background:var(--ui-accent);opacity:0.5;border-radius:3px;cursor:e-resize;" onmousedown={(e) => handleResizeStart(e, 'e')}></div>
+
+		<!-- Rotate handle (above top-center) -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div style="position:absolute;top:-28px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px;cursor:grab;"
+			onmousedown={handleRotateStart}>
+			<div style="width:10px;height:10px;border-radius:50%;background:var(--ui-accent);border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
+			<div style="width:1px;height:10px;background:var(--ui-accent);opacity:0.5;"></div>
+		</div>
+	{/if}
+</div>
+
