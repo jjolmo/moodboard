@@ -61,7 +61,7 @@
 			<div style="display:flex;flex-direction:column;gap:12px">
 				<div style="display:flex;align-items:center;gap:12px">
 					<span style="font-size:13px;color:var(--text-secondary)">Zoom speed</span>
-					<input type="range" min="1" max="10" value={appStore.zoomSensitivity}
+					<input type="range" min="1" max="30" value={appStore.zoomSensitivity}
 						oninput={(e) => appStore.setZoomSensitivity(parseInt(e.currentTarget.value))}
 						style="flex:1;accent-color:var(--ui-accent)" />
 					<span style="font-size:12px;color:var(--text-muted);min-width:20px;text-align:right">{appStore.zoomSensitivity}</span>

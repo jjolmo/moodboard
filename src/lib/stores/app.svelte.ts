@@ -304,7 +304,7 @@ function setTool(tool: Tool): void {
 function setShapeColor(color: string): void { shapeColor = color; }
 function toggleSidebar(): void { sidebarCollapsed = !sidebarCollapsed; }
 function toggleAnimateGifs(): void { animateGifs = !animateGifs; }
-function setZoomSensitivity(v: number): void { zoomSensitivity = Math.max(1, Math.min(10, v)); }
+function setZoomSensitivity(v: number): void { zoomSensitivity = Math.max(1, Math.min(30, v)); }
 function toggleSnap(): void { snapEnabled = !snapEnabled; }
 function setSnapDistance(d: number): void { snapDistance = Math.max(1, Math.min(50, d)); }
 function toggleFocusMode(): void { focusMode = !focusMode; }
