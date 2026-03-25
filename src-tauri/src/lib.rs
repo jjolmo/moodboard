@@ -329,6 +329,75 @@ fn import_moo(app: tauri::AppHandle, source_path: String) -> Result<Project, Str
     Ok(project)
 }
 
+// ── Desktop file install (Linux) ────────────────────────────
+
+#[tauri::command]
+fn install_desktop_file(app: tauri::AppHandle) -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let exe_path = std::env::var("APPIMAGE")
+            .unwrap_or_else(|_| std::env::current_exe()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default());
+
+        if exe_path.is_empty() {
+            return Err("Could not determine executable path".to_string());
+        }
+
+        // Save icon to a stable location
+        let icon_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+            .join("simple-moodboard");
+        fs::create_dir_all(&icon_dir).ok();
+        let icon_path = icon_dir.join("icon.png");
+
+        // Extract icon from app resources if possible, otherwise use a placeholder
+        let resource_path = app.path().resource_dir().ok();
+        let source_icon = resource_path.as_ref().and_then(|r| {
+            let p = r.join("icons/128x128.png");
+            if p.exists() { Some(p) } else { None }
+        });
+        if let Some(src) = source_icon {
+            fs::copy(&src, &icon_path).ok();
+        }
+
+        let desktop_content = format!(
+            "[Desktop Entry]\n\
+             Name=Simple Moodboard\n\
+             Comment=Cross-platform moodboard application\n\
+             Exec={exe}\n\
+             Icon={icon}\n\
+             Terminal=false\n\
+             Type=Application\n\
+             Categories=Graphics;\n\
+             StartupNotify=true\n",
+            exe = exe_path,
+            icon = icon_path.to_string_lossy(),
+        );
+
+        let desktop_dir = dirs::home_dir()
+            .ok_or("Could not find home dir")?
+            .join(".local/share/applications");
+        fs::create_dir_all(&desktop_dir).map_err(|e| e.to_string())?;
+
+        let desktop_path = desktop_dir.join("simple-moodboard.desktop");
+        fs::write(&desktop_path, &desktop_content).map_err(|e| e.to_string())?;
+
+        // Update desktop database silently
+        std::process::Command::new("update-desktop-database")
+            .arg(&desktop_dir)
+            .output()
+            .ok();
+
+        return Ok(format!("Installed to {}", desktop_path.to_string_lossy()));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        Err("Desktop file install is only available on Linux".to_string())
+    }
+}
+
 // ── App setup ───────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -351,6 +420,7 @@ pub fn run() {
             import_moo,
             updater::check_for_updates,
             updater::download_and_apply_update,
+            install_desktop_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
