@@ -8,14 +8,13 @@
 	import Lightbox from '$lib/components/Lightbox.svelte';
 	import ImageContextMenu from '$lib/components/ImageContextMenu.svelte';
 
-	onMount(async () => {
-		await appStore.loadAppState();
+	onMount(() => {
+		appStore.loadAppState();
 		window.addEventListener('beforeunload', () => { appStore.triggerSave(); });
 		document.addEventListener('contextmenu', (e) => {
 			const target = e.target as HTMLElement;
 			if (!target.closest('[data-allow-context]')) e.preventDefault();
 		});
-		// Auto-save every 60 seconds
 		const interval = setInterval(() => { appStore.triggerSave(); }, 60000);
 		return () => clearInterval(interval);
 	});

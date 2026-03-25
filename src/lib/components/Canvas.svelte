@@ -106,18 +106,8 @@
 
 		if (e.button !== 0) return;
 
-		// If the event reached here, it wasn't stopped by an element — we're on canvas
-		// Ctrl+drag = marquee selection
-		if (appStore.activeTool === 'select' && (e.ctrlKey || e.metaKey)) {
-			e.preventDefault();
-			marqueeSelecting = true;
-			const pos = getCanvasPos(e);
-			marqueeStart = pos;
-			marqueeCurrent = pos;
-			window.addEventListener('mousemove', handleMarqueeMove);
-			window.addEventListener('mouseup', handleMarqueeEnd);
-			return;
-		}
+		// Ctrl+drag is handled in capture phase (onMount) — skip here
+		if (e.ctrlKey || e.metaKey) return;
 
 		// Normal drag on canvas = pan
 		if (appStore.activeTool === 'select') {
@@ -149,8 +139,8 @@
 			return;
 		}
 
-		// Drawing tools (arrow, circle)
-		if (appStore.activeTool !== 'select' && appStore.activeTool !== 'text') {
+		// Drawing tools (arrow, circle) — remaining tools after select/text handled above
+		{
 			e.preventDefault();
 			const pos = getCanvasPos(e);
 			drawing = true;
@@ -216,6 +206,20 @@
 	let unlistenDragDrop: (() => void) | null = null;
 
 	onMount(async () => {
+		// Capture-phase listener so Ctrl+drag starts marquee even inside canvas children
+		viewport?.addEventListener('mousedown', (e: MouseEvent) => {
+			if (e.button === 0 && (e.ctrlKey || e.metaKey) && appStore.activeTool === 'select') {
+				e.preventDefault();
+				e.stopPropagation();
+				marqueeSelecting = true;
+				const pos = getCanvasPos(e);
+				marqueeStart = pos;
+				marqueeCurrent = pos;
+				window.addEventListener('mousemove', handleMarqueeMove);
+				window.addEventListener('mouseup', handleMarqueeEnd);
+			}
+		}, true); // true = capture phase
+
 		try {
 			const webview = getCurrentWebviewWindow();
 			unlistenDragDrop = await webview.onDragDropEvent(async (event) => {
