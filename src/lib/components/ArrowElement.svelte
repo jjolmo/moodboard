@@ -2,7 +2,7 @@
 	import { appStore } from '$lib/stores/app.svelte';
 	import type { CanvasElement, ArrowData } from '$lib/types';
 
-	let { element }: { element: CanvasElement } = $props();
+	let { element, zoom = 1 }: { element: CanvasElement; zoom?: number } = $props();
 
 	const isSelected = $derived(appStore.isSelected(element.id));
 	const data = $derived(element.data as ArrowData);
@@ -34,8 +34,8 @@
 
 	function handleDragMove(e: MouseEvent) {
 		if (!dragging) return;
-		const dx = e.clientX - dragStart.x;
-		const dy = e.clientY - dragStart.y;
+		const dx = (e.clientX - dragStart.x) / zoom;
+		const dy = (e.clientY - dragStart.y) / zoom;
 		appStore.updateElement(element.id, {
 			x: Math.max(0, dragStart.elemX + dx),
 			y: Math.max(0, dragStart.elemY + dy)

@@ -81,6 +81,16 @@
 	// ── Pan (left-click drag on canvas background) ──────────
 
 	function handleViewportMouseDown(e: MouseEvent) {
+		// Middle mouse button = pan from anywhere
+		if (e.button === 1) {
+			e.preventDefault();
+			panning = true;
+			panStart = { x: e.clientX, y: e.clientY, panX, panY };
+			window.addEventListener('mousemove', handlePanMove);
+			window.addEventListener('mouseup', handlePanEnd);
+			return;
+		}
+
 		if (e.button !== 0) return;
 
 		const target = e.target as HTMLElement;
@@ -454,13 +464,13 @@
 		<!-- Render elements -->
 		{#each appStore.elements as element (element.id)}
 			{#if element.type === 'image'}
-				<ImageElement {element} scrollContainer={viewport} />
+				<ImageElement {element} scrollContainer={viewport} {zoom} />
 			{:else if element.type === 'arrow'}
-				<ArrowElement {element} />
+				<ArrowElement {element} {zoom} />
 			{:else if element.type === 'circle'}
-				<CircleElement {element} />
+				<CircleElement {element} {zoom} />
 			{:else if element.type === 'text'}
-				<TextElement {element} />
+				<TextElement {element} {zoom} />
 			{/if}
 		{/each}
 
