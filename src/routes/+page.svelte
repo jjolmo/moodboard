@@ -11,6 +11,11 @@
 	onMount(async () => {
 		await appStore.loadAppState();
 		window.addEventListener('beforeunload', () => { appStore.triggerSave(); });
+		// Disable default browser context menu everywhere except our custom ones
+		document.addEventListener('contextmenu', (e) => {
+			const target = e.target as HTMLElement;
+			if (!target.closest('[data-allow-context]')) e.preventDefault();
+		});
 	});
 </script>
 

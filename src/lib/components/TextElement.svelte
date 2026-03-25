@@ -2,7 +2,7 @@
 	import { appStore } from '$lib/stores/app.svelte';
 	import type { CanvasElement, TextData } from '$lib/types';
 
-	let { element }: { element: CanvasElement } = $props();
+	let { element, zoom = 1 }: { element: CanvasElement; zoom?: number } = $props();
 
 	let editing = $state(false);
 	let dragging = $state(false);
@@ -38,8 +38,8 @@
 
 	function handleDragMove(e: MouseEvent) {
 		if (!dragging) return;
-		const dx = e.clientX - dragStart.x;
-		const dy = e.clientY - dragStart.y;
+		const dx = (e.clientX - dragStart.x) / zoom;
+		const dy = (e.clientY - dragStart.y) / zoom;
 		let nx = Math.max(0, dragStart.elemX + dx);
 		let ny = Math.max(0, dragStart.elemY + dy);
 		if (!rotation) {
@@ -101,8 +101,8 @@
 	}
 	function handleResizeMove(e: MouseEvent) {
 		if (!resizing) return;
-		const dx = e.clientX - resizeStart.x;
-		const dy = e.clientY - resizeStart.y;
+		const dx = (e.clientX - resizeStart.x) / zoom;
+		const dy = (e.clientY - resizeStart.y) / zoom;
 		let nw = resizeStart.w, nh = resizeStart.h, nx = resizeStart.elemX, ny = resizeStart.elemY;
 		if (resizing.includes('e')) nw = Math.max(60, resizeStart.w + dx);
 		if (resizing.includes('w')) { nw = Math.max(60, resizeStart.w - dx); nx = resizeStart.elemX + (resizeStart.w - nw); }
