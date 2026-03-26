@@ -51,6 +51,13 @@
 		</div>
 	{/if}
 
+	<!-- Arrange in grid (when multiple selected) -->
+	{#if appStore.selectedElementIds.size > 1}
+		<button class="icon-btn" onclick={() => appStore.arrangeInGrid()} title="Arrange in grid">
+			<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+		</button>
+	{/if}
+
 	<div style="flex:1"></div>
 
 	{#if appStore.activeVibe}

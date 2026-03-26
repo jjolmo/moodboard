@@ -279,6 +279,33 @@ function bringToFront(elementId: string): void {
 	}
 }
 
+function arrangeInGrid(): void {
+	if (!activeVibe || selectedElementIds.size < 2) return;
+	const selected = activeVibe.elements.filter(e => selectedElementIds.has(e.id));
+	if (selected.length < 2) return;
+
+	// Find top-left of selection as anchor
+	const minX = Math.min(...selected.map(e => e.x));
+	const minY = Math.min(...selected.map(e => e.y));
+	const maxW = Math.max(...selected.map(e => e.width));
+	const maxH = Math.max(...selected.map(e => e.height));
+	const gap = 20;
+	const cols = Math.ceil(Math.sqrt(selected.length));
+
+	// Sort by current position (top-to-bottom, left-to-right)
+	const sorted = [...selected].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+
+	for (let i = 0; i < sorted.length; i++) {
+		const col = i % cols;
+		const row = Math.floor(i / cols);
+		updateElement(sorted[i].id, {
+			x: minX + col * (maxW + gap),
+			y: minY + row * (maxH + gap),
+			rotation: 0
+		});
+	}
+}
+
 function selectElement(id: string | null, addToSelection = false): void {
 	if (id === null) {
 		selectedElementIds = new Set();
@@ -442,7 +469,7 @@ export const appStore = {
 	createProject, deleteProject, renameProject, selectProject,
 	createVibe, deleteVibe, renameVibe, updateVibeColor, selectVibe,
 	addElement, updateElement, updateSelectedElements, removeElement, removeSelectedElements,
-	bringToFront, selectElement, isSelected,
+	bringToFront, selectElement, isSelected, arrangeInGrid,
 	setTool, setShapeColor, toggleSidebar, toggleAnimateGifs,
 	toggleSnap, setSnapDistance, setZoomSensitivity, snapPosition,
 	toggleFocusMode, toggleRoundedCorners, openLightbox, closeLightbox, toggleAlwaysOnTop, openImageContextMenu, closeImageContextMenu,

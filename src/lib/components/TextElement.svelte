@@ -195,7 +195,7 @@
 
 	<!-- Selection border -->
 	{#if isSelected && !editing}
-		<div style="position:absolute;inset:0;border:2px dashed var(--ui-accent);pointer-events:none;"></div>
+		<div style="position:absolute;inset:0;border:2px dashed var(--ui-accent);background:rgba(99,102,241,0.06);pointer-events:none;"></div>
 	{/if}
 	{#if editing}
 		<div style="position:absolute;inset:0;border:2px solid var(--ui-accent);pointer-events:none;border-radius:2px;"></div>
