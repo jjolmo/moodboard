@@ -94,16 +94,7 @@
 	// ── Pan (left-click drag on canvas background) ──────────
 
 	function handleViewportMouseDown(e: MouseEvent) {
-		// Middle mouse button = pan from anywhere
-		if (e.button === 1) {
-			e.preventDefault();
-			panning = true;
-			panStart = { x: e.clientX, y: e.clientY, panX, panY };
-			window.addEventListener('mousemove', handlePanMove);
-			window.addEventListener('mouseup', handlePanEnd);
-			return;
-		}
-
+		// Middle click and Ctrl+drag handled in capture phase (onMount)
 		if (e.button !== 0) return;
 
 		// Ctrl+drag is handled in capture phase (onMount) — skip here
@@ -206,8 +197,19 @@
 	let unlistenDragDrop: (() => void) | null = null;
 
 	onMount(async () => {
-		// Capture-phase listener so Ctrl+drag starts marquee even inside canvas children
+		// Capture-phase listeners — intercept before any child can stopPropagation
 		viewport?.addEventListener('mousedown', (e: MouseEvent) => {
+			// Middle mouse = pan from anywhere
+			if (e.button === 1) {
+				e.preventDefault();
+				e.stopPropagation();
+				panning = true;
+				panStart = { x: e.clientX, y: e.clientY, panX, panY };
+				window.addEventListener('mousemove', handlePanMove);
+				window.addEventListener('mouseup', handlePanEnd);
+				return;
+			}
+			// Ctrl+drag = marquee selection
 			if (e.button === 0 && (e.ctrlKey || e.metaKey) && appStore.activeTool === 'select') {
 				e.preventDefault();
 				e.stopPropagation();
@@ -218,7 +220,7 @@
 				window.addEventListener('mousemove', handleMarqueeMove);
 				window.addEventListener('mouseup', handleMarqueeEnd);
 			}
-		}, true); // true = capture phase
+		}, true);
 
 		try {
 			const webview = getCurrentWebviewWindow();
