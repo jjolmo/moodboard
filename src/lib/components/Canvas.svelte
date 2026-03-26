@@ -406,6 +406,14 @@
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+		if ((e.target as HTMLElement)?.isContentEditable) return;
+
+		// Ctrl+Z = undo
+		if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+			e.preventDefault();
+			appStore.undo();
+			return;
+		}
 
 		if ((e.key === 'Delete' || e.key === 'Backspace') && appStore.selectedElementIds.size > 0) {
 			e.preventDefault();

@@ -20,7 +20,7 @@
 
 		appStore.selectElement(element.id);
 		appStore.bringToFront(element.id);
-
+		appStore.pushUndo();
 		dragging = true;
 		dragStart = { x: e.clientX, y: e.clientY, elemX: element.x, elemY: element.y };
 

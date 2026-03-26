@@ -12,6 +12,8 @@ function randomColor(): string {
 // ── App state ───────────────────────────────────────────────
 
 let projects = $state<Project[]>([]);
+let undoStack = $state<string[]>([]); // JSON snapshots of active vibe's elements
+const MAX_UNDO = 50;
 let activeProjectId = $state<string | null>(null);
 let activeVibeId = $state<string | null>(null);
 let activeTool = $state<Tool>('select');
@@ -99,6 +101,28 @@ const debouncedSave = debounce(async () => {
 }, 500);
 
 function triggerSave() { debouncedSave(); }
+
+function pushUndo(): void {
+	if (!activeVibe) return;
+	const snapshot = JSON.stringify(activeVibe.elements);
+	// Don't push if identical to last snapshot
+	if (undoStack.length > 0 && undoStack[undoStack.length - 1] === snapshot) return;
+	undoStack = [...undoStack.slice(-MAX_UNDO + 1), snapshot];
+}
+
+function undo(): void {
+	if (!activeProjectId || !activeVibeId || undoStack.length === 0) return;
+	const snapshot = undoStack[undoStack.length - 1];
+	undoStack = undoStack.slice(0, -1);
+	const elements = JSON.parse(snapshot) as CanvasElement[];
+	projects = projects.map((p) =>
+		p.id === activeProjectId ? { ...p, vibes: p.vibes.map((v) =>
+			v.id === activeVibeId ? { ...v, elements, updatedAt: now() } : v
+		), updatedAt: now() } : p
+	);
+	selectedElementIds = new Set();
+	triggerSave();
+}
 
 // ── Project actions ─────────────────────────────────────────
 
@@ -209,6 +233,7 @@ function selectVibe(vibeId: string): void {
 
 function addElement(element: CanvasElement): void {
 	if (!activeProjectId || !activeVibeId) return;
+	pushUndo();
 	projects = projects.map((p) =>
 		p.id === activeProjectId ? { ...p, vibes: p.vibes.map((v) =>
 			v.id === activeVibeId ? { ...v, elements: [...v.elements, element], updatedAt: now() } : v
@@ -244,6 +269,7 @@ function updateSelectedElements(updates: Partial<CanvasElement>): void {
 
 function removeElement(elementId: string): void {
 	if (!activeProjectId || !activeVibeId) return;
+	pushUndo();
 	projects = projects.map((p) =>
 		p.id === activeProjectId ? { ...p, vibes: p.vibes.map((v) =>
 			v.id === activeVibeId ? { ...v, elements: v.elements.filter((e) => e.id !== elementId), updatedAt: now() } : v
@@ -255,6 +281,7 @@ function removeElement(elementId: string): void {
 
 function removeSelectedElements(): void {
 	if (!activeProjectId || !activeVibeId) return;
+	pushUndo();
 	projects = projects.map((p) =>
 		p.id === activeProjectId ? { ...p, vibes: p.vibes.map((v) =>
 			v.id === activeVibeId ? { ...v, elements: v.elements.filter((e) => !selectedElementIds.has(e.id)), updatedAt: now() } : v
@@ -281,6 +308,7 @@ function bringToFront(elementId: string): void {
 
 function arrangeInGrid(): void {
 	if (!activeVibe || selectedElementIds.size < 2) return;
+	pushUndo();
 	const selected = activeVibe.elements.filter(e => selectedElementIds.has(e.id));
 	if (selected.length < 2) return;
 
@@ -474,5 +502,6 @@ export const appStore = {
 	toggleSnap, setSnapDistance, setZoomSensitivity, snapPosition,
 	toggleFocusMode, toggleRoundedCorners, openLightbox, closeLightbox, toggleAlwaysOnTop, openImageContextMenu, closeImageContextMenu,
 	saveViewport, getViewport,
+	pushUndo, undo,
 	setTheme, toggleSettings, exportMoo, importMoo
 };
