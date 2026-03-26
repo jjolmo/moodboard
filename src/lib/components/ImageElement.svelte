@@ -49,6 +49,7 @@
 		appStore.closeImageContextMenu();
 		appStore.selectElement(element.id, e.ctrlKey || e.metaKey);
 		appStore.bringToFront(element.id);
+		appStore.pushUndo();
 		dragging = true;
 		dragStart = { x: e.clientX, y: e.clientY, elemX: element.x, elemY: element.y };
 		window.addEventListener('mousemove', handleDragMove);
