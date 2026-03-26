@@ -28,6 +28,7 @@
 	let viewport = $state<HTMLElement | null>(null);
 	let isDragOver = $state(false);
 	let newTextElementId = $state<string | null>(null);
+	let skipNextClick = $state(false);
 	let drawing = $state(false);
 	let drawStart = $state({ x: 0, y: 0 });
 	let drawCurrent = $state({ x: 0, y: 0 });
@@ -179,28 +180,23 @@
 		const x2 = Math.max(marqueeStart.x, marqueeCurrent.x);
 		const y2 = Math.max(marqueeStart.y, marqueeCurrent.y);
 
-		console.log('[MARQUEE] start:', marqueeStart, 'end:', marqueeCurrent);
-		console.log('[MARQUEE] rect:', { x1, y1, x2, y2, w: x2-x1, h: y2-y1 });
-
-		if (Math.abs(x2 - x1) < 3 && Math.abs(y2 - y1) < 3) {
-			console.log('[MARQUEE] too small, skipping');
-			return;
-		}
+		if (Math.abs(x2 - x1) < 3 && Math.abs(y2 - y1) < 3) return;
 
 		const ids: string[] = [];
 		for (const el of appStore.elements) {
 			const ex = el.x, ey = el.y, ew = el.width, eh = el.height;
-			const hit = ex + ew > x1 && ex < x2 && ey + eh > y1 && ey < y2;
-			console.log(`[MARQUEE] element ${el.id.slice(0,8)} type=${el.type} pos=(${ex},${ey}) size=(${ew}x${eh}) hit=${hit}`);
-			if (hit) ids.push(el.id);
+			if (ex + ew > x1 && ex < x2 && ey + eh > y1 && ey < y2) {
+				ids.push(el.id);
+			}
 		}
-		console.log('[MARQUEE] selected:', ids.length, 'elements');
 
 		if (ids.length > 0) {
 			appStore.selectElement(null);
 			for (const id of ids) {
 				appStore.selectElement(id, true);
 			}
+			// Prevent the click event (fires after mouseup) from deselecting
+			skipNextClick = true;
 		}
 	}
 
@@ -345,6 +341,7 @@
 
 	function handleCanvasClick(e: MouseEvent) {
 		if (panning) return;
+		if (skipNextClick) { skipNextClick = false; return; }
 		if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.canvas === 'true') {
 			appStore.selectElement(null);
 		}
