@@ -38,8 +38,8 @@
 		const dx = (e.clientX - dragStart.x) / zoom;
 		const dy = (e.clientY - dragStart.y) / zoom;
 		appStore.updateElement(element.id, {
-			x: Math.max(0, dragStart.elemX + dx),
-			y: Math.max(0, dragStart.elemY + dy)
+			x: dragStart.elemX + dx,
+			y: dragStart.elemY + dy
 		});
 	}
 
