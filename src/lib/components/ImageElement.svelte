@@ -183,7 +183,7 @@
 	{/if}
 
 	{#if isSelected}
-		<div style="position:absolute;inset:0;border-radius:4px;border:2px solid var(--ui-accent);pointer-events:none;"></div>
+		<div style="position:absolute;inset:0;border-radius:4px;border:2px solid var(--ui-accent);background:rgba(99,102,241,0.08);pointer-events:none;"></div>
 
 		<!-- Corner resize handles -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
