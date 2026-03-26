@@ -17,17 +17,22 @@
 		appStore.bringToFront(element.id);
 	}
 
+	let dragPeers: { id: string; startX: number; startY: number }[] = [];
+
 	function handleMouseDown(e: MouseEvent) {
 		if (e.button === 1) return;
 		if (appStore.activeTool !== 'select') return;
 		e.stopPropagation();
 		e.preventDefault();
 
-		appStore.selectElement(element.id);
+		if (!appStore.isSelected(element.id)) {
+			appStore.selectElement(element.id, e.ctrlKey || e.metaKey);
+		}
 		appStore.bringToFront(element.id);
 		appStore.pushUndo();
 		dragging = true;
 		dragStart = { x: e.clientX, y: e.clientY, elemX: element.x, elemY: element.y };
+		dragPeers = appStore.selectedElements.filter(el => el.id !== element.id).map(el => ({ id: el.id, startX: el.x, startY: el.y }));
 
 		window.addEventListener('mousemove', handleDragMove);
 		window.addEventListener('mouseup', handleDragEnd);
@@ -38,15 +43,21 @@
 		if (!dragging) return;
 		cancelAnimationFrame(dragRaf);
 		dragRaf = requestAnimationFrame(() => {
+			const dx = (e.clientX - dragStart.x) / zoom;
+			const dy = (e.clientY - dragStart.y) / zoom;
 			appStore.updateElement(element.id, {
-				x: dragStart.elemX + (e.clientX - dragStart.x) / zoom,
-				y: dragStart.elemY + (e.clientY - dragStart.y) / zoom
+				x: dragStart.elemX + dx,
+				y: dragStart.elemY + dy
 			});
+			for (const peer of dragPeers) {
+				appStore.updateElement(peer.id, { x: peer.startX + dx, y: peer.startY + dy });
+			}
 		});
 	}
 
 	function handleDragEnd() {
 		dragging = false;
+		dragPeers = [];
 		window.removeEventListener('mousemove', handleDragMove);
 		window.removeEventListener('mouseup', handleDragEnd);
 	}
