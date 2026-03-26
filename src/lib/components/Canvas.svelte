@@ -179,17 +179,24 @@
 		const x2 = Math.max(marqueeStart.x, marqueeCurrent.x);
 		const y2 = Math.max(marqueeStart.y, marqueeCurrent.y);
 
-		if (Math.abs(x2 - x1) < 3 && Math.abs(y2 - y1) < 3) return;
+		console.log('[MARQUEE] start:', marqueeStart, 'end:', marqueeCurrent);
+		console.log('[MARQUEE] rect:', { x1, y1, x2, y2, w: x2-x1, h: y2-y1 });
+
+		if (Math.abs(x2 - x1) < 3 && Math.abs(y2 - y1) < 3) {
+			console.log('[MARQUEE] too small, skipping');
+			return;
+		}
 
 		const ids: string[] = [];
 		for (const el of appStore.elements) {
 			const ex = el.x, ey = el.y, ew = el.width, eh = el.height;
-			if (ex + ew > x1 && ex < x2 && ey + eh > y1 && ey < y2) {
-				ids.push(el.id);
-			}
+			const hit = ex + ew > x1 && ex < x2 && ey + eh > y1 && ey < y2;
+			console.log(`[MARQUEE] element ${el.id.slice(0,8)} type=${el.type} pos=(${ex},${ey}) size=(${ew}x${eh}) hit=${hit}`);
+			if (hit) ids.push(el.id);
 		}
+		console.log('[MARQUEE] selected:', ids.length, 'elements');
+
 		if (ids.length > 0) {
-			// Clear then add all — don't toggle
 			appStore.selectElement(null);
 			for (const id of ids) {
 				appStore.selectElement(id, true);
