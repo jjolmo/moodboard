@@ -165,8 +165,10 @@
 		marqueeCurrent = getCanvasPos(e);
 	}
 
-	function handleMarqueeEnd() {
+	function handleMarqueeEnd(e: MouseEvent) {
 		if (!marqueeSelecting) return;
+		// Update to final position
+		marqueeCurrent = getCanvasPos(e);
 		marqueeSelecting = false;
 		window.removeEventListener('mousemove', handleMarqueeMove);
 		window.removeEventListener('mouseup', handleMarqueeEnd);
@@ -177,7 +179,7 @@
 		const x2 = Math.max(marqueeStart.x, marqueeCurrent.x);
 		const y2 = Math.max(marqueeStart.y, marqueeCurrent.y);
 
-		if (Math.abs(x2 - x1) < 5 && Math.abs(y2 - y1) < 5) return;
+		if (Math.abs(x2 - x1) < 3 && Math.abs(y2 - y1) < 3) return;
 
 		const ids: string[] = [];
 		for (const el of appStore.elements) {
