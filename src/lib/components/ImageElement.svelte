@@ -13,6 +13,7 @@
 	let dragStart = $state({ x: 0, y: 0, elemX: 0, elemY: 0 });
 	let resizeStart = $state({ x: 0, y: 0, w: 0, h: 0, elemX: 0, elemY: 0 });
 	let rotateStart = $state({ angle: 0, mouseAngle: 0 });
+	let wrapperEl = $state<HTMLDivElement | null>(null);
 
 	const isSelected = $derived(appStore.isSelected(element.id));
 	const data = $derived(element.data as MoodImageData);
@@ -124,27 +125,28 @@
 
 	// ── Rotate ──────────────────────────────────────────────
 
+	function getScreenCenter(): { cx: number; cy: number } {
+		if (wrapperEl) {
+			const r = wrapperEl.getBoundingClientRect();
+			return { cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+		}
+		return { cx: 0, cy: 0 };
+	}
+
 	function handleRotateStart(e: MouseEvent) {
 		e.stopPropagation(); e.preventDefault();
 		rotating = true;
-		const cx = element.x + element.width / 2;
-		const cy = element.y + element.height / 2;
-		// We need to figure out mouse angle in canvas space - approximate using viewport
-		const rect = scrollContainer?.getBoundingClientRect();
-		// This is approximate but works for the UX
-		rotateStart = { angle: rotation, mouseAngle: Math.atan2(e.clientY - ((rect?.top ?? 0) + cy), e.clientX - ((rect?.left ?? 0) + cx)) * 180 / Math.PI };
+		const { cx, cy } = getScreenCenter();
+		rotateStart = { angle: rotation, mouseAngle: Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI };
 		window.addEventListener('mousemove', handleRotateMove);
 		window.addEventListener('mouseup', handleRotateEnd);
 	}
 
 	function handleRotateMove(e: MouseEvent) {
 		if (!rotating) return;
-		const cx = element.x + element.width / 2;
-		const cy = element.y + element.height / 2;
-		const rect = scrollContainer?.getBoundingClientRect();
-		const currentAngle = Math.atan2(e.clientY - ((rect?.top ?? 0) + cy), e.clientX - ((rect?.left ?? 0) + cx)) * 180 / Math.PI;
+		const { cx, cy } = getScreenCenter();
+		const currentAngle = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
 		let newRot = rotateStart.angle + (currentAngle - rotateStart.mouseAngle);
-		// Snap to 0/90/180/270 when within 5 degrees
 		for (const snap of [0, 90, 180, 270, -90, -180, -270, 360]) {
 			if (Math.abs(newRot - snap) < 5) { newRot = snap; break; }
 		}
@@ -160,6 +162,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
+	bind:this={wrapperEl}
 	class="absolute select-none"
 	style="left:{element.x}px; top:{element.y}px; width:{element.width}px; height:{element.height}px; z-index:{element.zIndex}; transform:rotate({rotation}deg); transform-origin:center center;"
 	onmousedown={handleMouseDown}
