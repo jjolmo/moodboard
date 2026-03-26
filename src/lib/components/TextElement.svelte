@@ -201,8 +201,8 @@
 		<div style="position:absolute;inset:0;border:2px solid var(--ui-accent);pointer-events:none;border-radius:2px;"></div>
 	{/if}
 
-	<!-- Resize handles (only when selected, not editing) -->
-	{#if isSelected && !editing}
+	<!-- Resize handles -->
+	{#if isSelected || editing}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div style="position:absolute;left:-5px;top:-5px;width:10px;height:10px;background:var(--ui-accent);border-radius:2px;cursor:nw-resize;" onmousedown={(e) => handleResizeStart(e, 'nw')}></div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
