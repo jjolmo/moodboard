@@ -45,6 +45,7 @@
 	let panStart = $state({ x: 0, y: 0, panX: 0, panY: 0 });
 	let showZoomTooltip = $state(false);
 	let lastVibeId = $state<string | null>(null);
+	let spaceHeld = $state(false);
 
 	const debouncedSaveViewport = debounce(() => {
 		appStore.saveViewport(panX, panY, zoom);
@@ -93,22 +94,34 @@
 		debouncedSaveViewport();
 	}
 
-	// ── Pan (left-click drag on canvas background) ──────────
+	// ── Pan & Select (mouse interactions on canvas background) ──────────
 
 	function handleViewportMouseDown(e: MouseEvent) {
-		// Middle click and Ctrl+drag handled in capture phase (onMount)
+		// Middle click and Space+drag handled in capture phase (onMount)
 		if (e.button !== 0) return;
 
 		// Ctrl+drag is handled in capture phase (onMount) — skip here
 		if (e.ctrlKey || e.metaKey) return;
 
-		// Normal drag on canvas = pan
-		if (appStore.activeTool === 'select') {
+		// Space+drag = pan
+		if (spaceHeld) {
 			e.preventDefault();
 			panning = true;
 			panStart = { x: e.clientX, y: e.clientY, panX, panY };
 			window.addEventListener('mousemove', handlePanMove);
 			window.addEventListener('mouseup', handlePanEnd);
+			return;
+		}
+
+		// Normal left-click drag on canvas = marquee selection
+		if (appStore.activeTool === 'select') {
+			e.preventDefault();
+			marqueeSelecting = true;
+			const pos = getCanvasPos(e);
+			marqueeStart = pos;
+			marqueeCurrent = pos;
+			window.addEventListener('mousemove', handleMarqueeMove);
+			window.addEventListener('mouseup', handleMarqueeEnd);
 			return;
 		}
 
@@ -217,7 +230,17 @@
 				window.addEventListener('mouseup', handlePanEnd);
 				return;
 			}
-			// Ctrl+drag = marquee selection
+			// Space+drag = pan from anywhere (even over elements)
+			if (e.button === 0 && spaceHeld) {
+				e.preventDefault();
+				e.stopPropagation();
+				panning = true;
+				panStart = { x: e.clientX, y: e.clientY, panX, panY };
+				window.addEventListener('mousemove', handlePanMove);
+				window.addEventListener('mouseup', handlePanEnd);
+				return;
+			}
+			// Ctrl+drag = marquee selection (additive, even over elements)
 			if (e.button === 0 && (e.ctrlKey || e.metaKey) && appStore.activeTool === 'select') {
 				e.preventDefault();
 				e.stopPropagation();
@@ -405,6 +428,12 @@
 	// ── Keyboard shortcuts ──────────────────────────────────
 
 	function handleKeydown(e: KeyboardEvent) {
+		// Track space for pan mode
+		if (e.code === 'Space' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement)?.isContentEditable)) {
+			e.preventDefault();
+			spaceHeld = true;
+		}
+
 		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 		if ((e.target as HTMLElement)?.isContentEditable) return;
 
@@ -461,12 +490,13 @@
 	// Cursor logic
 	const cursorStyle = $derived(
 		panning ? 'grabbing' :
+		spaceHeld ? 'grab' :
 		appStore.activeTool !== 'select' ? 'crosshair' :
 		'default'
 	);
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} onkeyup={(e) => { if (e.code === 'Space') spaceHeld = false; }} />
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
