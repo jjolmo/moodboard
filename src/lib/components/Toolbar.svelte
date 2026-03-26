@@ -11,6 +11,7 @@
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+		if ((e.target as HTMLElement)?.isContentEditable) return;
 		if (e.key === 'v' || e.key === 'V') appStore.setTool('select');
 		if (e.key === 'a' || e.key === 'A') appStore.setTool('arrow');
 		if (e.key === 'c' || e.key === 'C') appStore.setTool('circle');

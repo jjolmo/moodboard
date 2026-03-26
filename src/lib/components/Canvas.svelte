@@ -27,6 +27,7 @@
 
 	let viewport = $state<HTMLElement | null>(null);
 	let isDragOver = $state(false);
+	let newTextElementId = $state<string | null>(null);
 	let drawing = $state(false);
 	let drawStart = $state({ x: 0, y: 0 });
 	let drawCurrent = $state({ x: 0, y: 0 });
@@ -123,10 +124,12 @@
 				width: 200,
 				height: 40,
 				zIndex: maxZ + 1,
-				data: { text: 'Text', fontSize: 24, fontFamily: 'Inter, sans-serif', color: appStore.shapeColor, align: 'left' } as TextData
+				data: { text: '', fontSize: 24, fontFamily: 'Inter, sans-serif', color: appStore.shapeColor, align: 'left' } as TextData
 			};
 			appStore.addElement(element);
 			appStore.setTool('select');
+			// Signal the new text element to start editing immediately
+			newTextElementId = element.id;
 			return;
 		}
 
@@ -490,7 +493,7 @@
 			{:else if element.type === 'circle'}
 				<CircleElement {element} {zoom} />
 			{:else if element.type === 'text'}
-				<TextElement {element} {zoom} />
+				<TextElement {element} {zoom} autoEdit={newTextElementId === element.id} onEditStarted={() => { newTextElementId = null; }} />
 			{/if}
 		{/each}
 
