@@ -3,7 +3,9 @@
 	import type { CanvasElement, TextData } from '$lib/types';
 	import { onMount } from 'svelte';
 
-	let { element, zoom = 1 }: { element: CanvasElement; zoom?: number } = $props();
+	let { element, zoom = 1, autoEdit = false, onEditStarted = () => {} }: {
+		element: CanvasElement; zoom?: number; autoEdit?: boolean; onEditStarted?: () => void;
+	} = $props();
 
 	let editing = $state(false);
 	let dragging = $state(false);
@@ -37,6 +39,11 @@
 
 	onMount(() => {
 		document.addEventListener('mousedown', handleGlobalMouseDown, true);
+		// Auto-start editing if just created
+		if (autoEdit) {
+			startEditing();
+			onEditStarted();
+		}
 		return () => document.removeEventListener('mousedown', handleGlobalMouseDown, true);
 	});
 
