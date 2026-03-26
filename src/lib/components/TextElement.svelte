@@ -82,9 +82,10 @@
 
 	function startEditing() {
 		editing = true;
-		// Focus the contenteditable after Svelte renders it
+		// Set text and focus after Svelte renders the contenteditable
 		requestAnimationFrame(() => {
 			if (editDiv) {
+				editDiv.innerText = data.text;
 				editDiv.focus();
 				// Place cursor at end
 				const sel = window.getSelection();
@@ -182,7 +183,7 @@
 			oninput={handleTextInput}
 			onkeydown={handleTextKeydown}
 			style="width:100%;height:100%;outline:none;overflow:hidden;white-space:pre-wrap;word-break:break-word;font-size:{data.fontSize}px;font-family:{data.fontFamily};color:{data.color};text-align:{data.align};line-height:1.3;cursor:text;padding:6px;caret-color:{data.color};"
-		>{data.text}</div>
+		></div>
 	{:else}
 		<div style="width:100%;height:100%;overflow:hidden;white-space:pre-wrap;word-break:break-word;font-size:{data.fontSize}px;font-family:{data.fontFamily};color:{data.color};text-align:{data.align};line-height:1.3;padding:6px;cursor:{isSelected ? 'move' : 'default'};">
 			{data.text}
