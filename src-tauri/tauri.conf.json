@@ -39,7 +39,7 @@
 	},
 	"plugins": {
 		"updater": {
-			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE5ODZCQUY1NkU5ODRCMEYKUldRUFM1aHU5YnFHcVZWUzRKTHhmSnYwOUZOMThCSEpDZTd6SVZML2FvQ2tSNVhsQk9qQ3lSOWwK",
+			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE1MEY0MDk4NzM5QjZBRTYKUldUbWFwdHptRUFQcFFMQnZYTnl6NXRpb3FWWUlmRkdnVENycGd0LzVMektQeVA4U2xoMTJjRnQK",
 			"endpoints": [
 				"https://github.com/jjolmo/moodboard/releases/latest/download/latest.json"
 			]
