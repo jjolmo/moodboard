@@ -1,11 +1,15 @@
 <script lang="ts">
 	import { appStore } from '$lib/stores/app.svelte';
 	import { invoke } from '@tauri-apps/api/core';
+	import { getVersion } from '@tauri-apps/api/app';
 
 	let updateStatus = $state<string>('');
 	let checking = $state(false);
 	let desktopStatus = $state<string>('');
+	let appVersion = $state<string>('');
 	const isLinux = navigator.userAgent.includes('Linux');
+
+	getVersion().then(v => appVersion = v).catch(() => {});
 
 	async function checkUpdates() {
 		checking = true;
@@ -39,15 +43,15 @@
 		<div class="settings-section">
 			<div class="settings-section-label">Appearance</div>
 			<div class="theme-grid">
-				<button class="theme-card {appStore.theme === 'light' ? 'active' : ''}" onclick={() => appStore.setTheme('light')}>
-					<div class="theme-icon light-icon">
-						<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+				<button class="theme-card-compact {appStore.theme === 'light' ? 'active' : ''}" onclick={() => appStore.setTheme('light')}>
+					<div class="theme-icon-sm light-icon">
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
 					</div>
 					<span>Light</span>
 				</button>
-				<button class="theme-card {appStore.theme === 'dark' ? 'active' : ''}" onclick={() => appStore.setTheme('dark')}>
-					<div class="theme-icon dark-icon">
-						<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" stroke-width="1.5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+				<button class="theme-card-compact {appStore.theme === 'dark' ? 'active' : ''}" onclick={() => appStore.setTheme('dark')}>
+					<div class="theme-icon-sm dark-icon">
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" stroke-width="1.5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
 					</div>
 					<span>Dark</span>
 				</button>
@@ -125,7 +129,9 @@
 			{/if}
 		</div>
 
-		<div class="settings-footer">Ctrl+0 to reset view</div>
+		<div class="settings-footer">
+			{#if appVersion}<span>v{appVersion}</span> · {/if}Ctrl+0 to reset view
+		</div>
 	</div>
 {/if}
 
@@ -169,13 +175,12 @@
 		grid-template-columns: 1fr 1fr;
 		gap: 12px;
 	}
-	.theme-card {
+	.theme-card-compact {
 		display: flex;
-		flex-direction: column;
 		align-items: center;
-		gap: 12px;
-		padding: 20px 16px;
-		border-radius: 16px;
+		gap: 8px;
+		padding: 10px 14px;
+		border-radius: 10px;
 		border: none;
 		background: var(--bg-primary);
 		cursor: pointer;
@@ -184,18 +189,18 @@
 		font-weight: 600;
 		color: var(--text-muted);
 	}
-	.theme-card:hover { background: var(--bg-hover); }
-	.theme-card.active {
+	.theme-card-compact:hover { background: var(--bg-hover); }
+	.theme-card-compact.active {
 		outline: 2px solid var(--ui-accent);
 		outline-offset: -2px;
 		color: var(--ui-accent);
 	}
-	.theme-icon {
+	.theme-icon-sm {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 48px; height: 48px;
-		border-radius: 14px;
+		width: 32px; height: 32px;
+		border-radius: 8px;
 	}
 	.light-icon { background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 	.dark-icon { background: #1e1e2e; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }

@@ -31,6 +31,7 @@ let lightboxElementId = $state<string | null>(null);
 let roundedCorners = $state(true);
 let zoomSensitivity = $state(5); // 1-10, maps to zoom factor
 let imageContextMenu = $state<{ x: number; y: number; elementId: string } | null>(null);
+let clipboard = $state<{ elements: CanvasElement[]; isCut: boolean }>({ elements: [], isCut: false });
 
 // ── Derived ─────────────────────────────────────────────────
 
@@ -351,6 +352,50 @@ function isSelected(id: string): boolean {
 	return selectedElementIds.has(id);
 }
 
+function copyElements(): void {
+	if (selectedElementIds.size === 0) return;
+	clipboard = { elements: JSON.parse(JSON.stringify(selectedElements)), isCut: false };
+}
+
+function cutElements(): void {
+	if (selectedElementIds.size === 0) return;
+	clipboard = { elements: JSON.parse(JSON.stringify(selectedElements)), isCut: true };
+	removeSelectedElements();
+}
+
+function pasteElements(): void {
+	if (clipboard.elements.length === 0 || !activeProjectId || !activeVibeId) return;
+	pushUndo();
+	const offset = clipboard.isCut ? 0 : 20;
+	const maxZ = Math.max(...(elements.map(e => e.zIndex) ?? [0]), 0);
+	const newIds: string[] = [];
+	for (let i = 0; i < clipboard.elements.length; i++) {
+		const src = clipboard.elements[i];
+		const newId = generateId();
+		newIds.push(newId);
+		const el: CanvasElement = {
+			...src,
+			id: newId,
+			x: src.x + offset,
+			y: src.y + offset,
+			zIndex: maxZ + 1 + i
+		};
+		// Add without pushUndo (already pushed above)
+		projects = projects.map((p) =>
+			p.id === activeProjectId ? { ...p, vibes: p.vibes.map((v) =>
+				v.id === activeVibeId ? { ...v, elements: [...v.elements, el], updatedAt: now() } : v
+			), updatedAt: now() } : p
+		);
+	}
+	selectedElementIds = new Set(newIds);
+	if (clipboard.isCut) clipboard = { elements: [], isCut: false };
+	// Shift clipboard offset for successive pastes
+	if (!clipboard.isCut) {
+		clipboard = { ...clipboard, elements: clipboard.elements.map(e => ({ ...e, x: e.x + offset, y: e.y + offset })) };
+	}
+	triggerSave();
+}
+
 function setTool(tool: Tool): void {
 	activeTool = tool;
 	if (tool !== 'select') selectedElementIds = new Set();
@@ -497,7 +542,7 @@ export const appStore = {
 	createProject, deleteProject, renameProject, selectProject,
 	createVibe, deleteVibe, renameVibe, updateVibeColor, selectVibe,
 	addElement, updateElement, updateSelectedElements, removeElement, removeSelectedElements,
-	bringToFront, selectElement, isSelected, arrangeInGrid,
+	bringToFront, selectElement, isSelected, arrangeInGrid, copyElements, cutElements, pasteElements,
 	setTool, setShapeColor, toggleSidebar, toggleAnimateGifs,
 	toggleSnap, setSnapDistance, setZoomSensitivity, snapPosition,
 	toggleFocusMode, toggleRoundedCorners, openLightbox, closeLightbox, toggleAlwaysOnTop, openImageContextMenu, closeImageContextMenu,

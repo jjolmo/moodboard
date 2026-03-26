@@ -444,6 +444,23 @@
 			return;
 		}
 
+		// Ctrl+C = copy, Ctrl+X = cut, Ctrl+V = paste
+		if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+			e.preventDefault();
+			appStore.copyElements();
+			return;
+		}
+		if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
+			e.preventDefault();
+			appStore.cutElements();
+			return;
+		}
+		if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+			e.preventDefault();
+			appStore.pasteElements();
+			return;
+		}
+
 		if ((e.key === 'Delete' || e.key === 'Backspace') && appStore.selectedElementIds.size > 0) {
 			e.preventDefault();
 			// Delete image files for selected image elements

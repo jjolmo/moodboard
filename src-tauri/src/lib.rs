@@ -348,12 +348,12 @@ fn install_desktop_file(app: tauri::AppHandle) -> Result<String, String> {
         let icon_dir = dirs::data_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
             .join("simple-moodboard");
-        fs::create_dir_all(&icon_dir).ok();
+        fs::create_dir_all(&icon_dir).map_err(|e| format!("Failed to create icon dir: {}", e))?;
         let icon_path = icon_dir.join("icon.png");
 
         // Embed the 128x128 icon at compile time
         let icon_bytes = include_bytes!("../icons/128x128.png");
-        fs::write(&icon_path, icon_bytes).ok();
+        fs::write(&icon_path, icon_bytes).map_err(|e| format!("Failed to write icon: {}", e))?;
 
         let desktop_content = format!(
             "[Desktop Entry]\n\

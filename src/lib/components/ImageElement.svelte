@@ -49,16 +49,23 @@
 		}
 	});
 
+	let dragPeers: { id: string; startX: number; startY: number }[] = [];
+
 	function handleMouseDown(e: MouseEvent) {
 		if (e.button === 1) return; // middle click reserved for pan
 		if (appStore.activeTool !== 'select') return;
 		e.stopPropagation(); e.preventDefault();
 		appStore.closeImageContextMenu();
-		appStore.selectElement(element.id, e.ctrlKey || e.metaKey);
+		// If already selected and part of multi-selection, don't reset selection
+		if (!appStore.isSelected(element.id)) {
+			appStore.selectElement(element.id, e.ctrlKey || e.metaKey);
+		}
 		appStore.bringToFront(element.id);
 		appStore.pushUndo();
 		dragging = true;
 		dragStart = { x: e.clientX, y: e.clientY, elemX: element.x, elemY: element.y };
+		// Capture initial positions of all selected elements for group drag
+		dragPeers = appStore.selectedElements.filter(el => el.id !== element.id).map(el => ({ id: el.id, startX: el.x, startY: el.y }));
 		window.addEventListener('mousemove', handleDragMove);
 		window.addEventListener('mouseup', handleDragEnd);
 	}
@@ -77,11 +84,16 @@
 				nx = snapped.x; ny = snapped.y;
 			}
 			appStore.updateElement(element.id, { x: nx, y: ny });
+			// Move all other selected elements by the same delta
+			for (const peer of dragPeers) {
+				appStore.updateElement(peer.id, { x: peer.startX + dx, y: peer.startY + dy });
+			}
 		});
 	}
 
 	function handleDragEnd() {
 		dragging = false;
+		dragPeers = [];
 		window.removeEventListener('mousemove', handleDragMove);
 		window.removeEventListener('mouseup', handleDragEnd);
 	}
