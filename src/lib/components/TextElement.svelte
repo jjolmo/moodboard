@@ -41,8 +41,8 @@
 		if (!dragging) return;
 		const dx = (e.clientX - dragStart.x) / zoom;
 		const dy = (e.clientY - dragStart.y) / zoom;
-		let nx = Math.max(0, dragStart.elemX + dx);
-		let ny = Math.max(0, dragStart.elemY + dy);
+		let nx = dragStart.elemX + dx;
+		let ny = dragStart.elemY + dy;
 		if (!rotation) {
 			const snapped = appStore.snapPosition(element.id, nx, ny, element.width, element.height);
 			nx = snapped.x; ny = snapped.y;
@@ -109,7 +109,7 @@
 		if (resizing.includes('w')) { nw = Math.max(60, resizeStart.w - dx); nx = resizeStart.elemX + (resizeStart.w - nw); }
 		if (resizing.includes('s')) nh = Math.max(24, resizeStart.h + dy);
 		if (resizing.includes('n')) { nh = Math.max(24, resizeStart.h - dy); ny = resizeStart.elemY + (resizeStart.h - nh); }
-		appStore.updateElement(element.id, { x: Math.max(0, nx), y: Math.max(0, ny), width: nw, height: nh });
+		appStore.updateElement(element.id, { x: nx, y: ny, width: nw, height: nh });
 	}
 	function handleResizeEnd() {
 		resizing = null;
