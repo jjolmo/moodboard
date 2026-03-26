@@ -2,11 +2,13 @@
 	import { appStore } from '$lib/stores/app.svelte';
 	import type { CanvasElement, MoodImageData } from '$lib/types';
 	import { invoke } from '@tauri-apps/api/core';
+	import { getCachedImage, getCachedStaticFrame, cacheStaticFrame } from '$lib/utils/imageCache';
 
 	let { element, scrollContainer, zoom = 1 }: { element: CanvasElement; scrollContainer: HTMLElement | null; zoom?: number } = $props();
 
 	let imageSrc = $state('');
 	let staticSrc = $state('');
+	let loadedFilename = $state('');
 	let dragging = $state(false);
 	let resizing = $state<string | null>(null);
 	let rotating = $state(false);
@@ -21,26 +23,31 @@
 	const displaySrc = $derived(isGif && !appStore.animateGifs && staticSrc ? staticSrc : imageSrc);
 	const rotation = $derived(element.rotation ?? 0);
 
-	$effect(() => { loadImage(); });
-
-	async function loadImage() {
-		if (!data.filename || !appStore.activeProjectId) return;
-		try {
-			imageSrc = await invoke('get_image_base64', {
-				projectId: appStore.activeProjectId, filename: data.filename
-			});
-			if (isGif && imageSrc) {
-				const img = new Image();
-				img.onload = () => {
-					const canvas = document.createElement('canvas');
-					canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
-					canvas.getContext('2d')?.drawImage(img, 0, 0);
-					staticSrc = canvas.toDataURL('image/png');
-				};
-				img.src = imageSrc;
-			}
-		} catch (e) { console.error('Failed to load image:', e); }
-	}
+	// Only reload when filename changes — not on position/size/selection updates
+	$effect(() => {
+		const fn = data.filename;
+		const pid = appStore.activeProjectId;
+		if (fn && pid && fn !== loadedFilename) {
+			loadedFilename = fn;
+			getCachedImage(pid, fn).then((src) => {
+				imageSrc = src;
+				if (fn.toLowerCase().endsWith('.gif')) {
+					const cached = getCachedStaticFrame(src);
+					if (cached) { staticSrc = cached; return; }
+					const img = new Image();
+					img.onload = () => {
+						const c = document.createElement('canvas');
+						c.width = img.naturalWidth; c.height = img.naturalHeight;
+						c.getContext('2d')?.drawImage(img, 0, 0);
+						const frame = c.toDataURL('image/png');
+						cacheStaticFrame(src, frame);
+						staticSrc = frame;
+					};
+					img.src = src;
+				}
+			}).catch(console.error);
+		}
+	});
 
 	function handleMouseDown(e: MouseEvent) {
 		if (e.button === 1) return; // middle click reserved for pan
@@ -56,17 +63,21 @@
 		window.addEventListener('mouseup', handleDragEnd);
 	}
 
+	let dragRaf = 0;
 	function handleDragMove(e: MouseEvent) {
 		if (!dragging) return;
-		const dx = (e.clientX - dragStart.x) / zoom;
-		const dy = (e.clientY - dragStart.y) / zoom;
-		let nx = dragStart.elemX + dx;
-		let ny = dragStart.elemY + dy;
-		if (!rotation) {
-			const snapped = appStore.snapPosition(element.id, nx, ny, element.width, element.height);
-			nx = snapped.x; ny = snapped.y;
-		}
-		appStore.updateElement(element.id, { x: nx, y: ny });
+		cancelAnimationFrame(dragRaf);
+		dragRaf = requestAnimationFrame(() => {
+			const dx = (e.clientX - dragStart.x) / zoom;
+			const dy = (e.clientY - dragStart.y) / zoom;
+			let nx = dragStart.elemX + dx;
+			let ny = dragStart.elemY + dy;
+			if (!rotation) {
+				const snapped = appStore.snapPosition(element.id, nx, ny, element.width, element.height);
+				nx = snapped.x; ny = snapped.y;
+			}
+			appStore.updateElement(element.id, { x: nx, y: ny });
+		});
 	}
 
 	function handleDragEnd() {
@@ -96,26 +107,32 @@
 		window.addEventListener('mouseup', handleResizeEnd);
 	}
 
+	let resizeRaf = 0;
 	function handleResizeMove(e: MouseEvent) {
 		if (!resizing) return;
+		const handle = resizing;
+		cancelAnimationFrame(resizeRaf);
+		resizeRaf = requestAnimationFrame(() => {
+		if (!handle) return;
 		const dx = (e.clientX - resizeStart.x) / zoom;
 		const dy = (e.clientY - resizeStart.y) / zoom;
 		const ar = resizeStart.w / resizeStart.h;
 		let nw = resizeStart.w, nh = resizeStart.h, nx = resizeStart.elemX, ny = resizeStart.elemY;
-		if (resizing.includes('e')) nw = Math.max(50, resizeStart.w + dx);
-		if (resizing.includes('w')) { nw = Math.max(50, resizeStart.w - dx); nx = resizeStart.elemX + (resizeStart.w - nw); }
-		if (resizing.includes('s')) nh = Math.max(50, resizeStart.h + dy);
-		if (resizing.includes('n')) { nh = Math.max(50, resizeStart.h - dy); ny = resizeStart.elemY + (resizeStart.h - nh); }
-		if (e.shiftKey || resizing.length === 2) {
+		if (handle.includes('e')) nw = Math.max(50, resizeStart.w + dx);
+		if (handle.includes('w')) { nw = Math.max(50, resizeStart.w - dx); nx = resizeStart.elemX + (resizeStart.w - nw); }
+		if (handle.includes('s')) nh = Math.max(50, resizeStart.h + dy);
+		if (handle.includes('n')) { nh = Math.max(50, resizeStart.h - dy); ny = resizeStart.elemY + (resizeStart.h - nh); }
+		if (e.shiftKey || handle.length === 2) {
 			if (Math.abs(dx) > Math.abs(dy)) {
 				nh = nw / ar;
-				if (resizing.includes('n')) ny = resizeStart.elemY + resizeStart.h - nh;
+				if (handle.includes('n')) ny = resizeStart.elemY + resizeStart.h - nh;
 			} else {
 				nw = nh * ar;
-				if (resizing.includes('w')) nx = resizeStart.elemX + resizeStart.w - nw;
+				if (handle.includes('w')) nx = resizeStart.elemX + resizeStart.w - nw;
 			}
 		}
 		appStore.updateElement(element.id, { x: nx, y: ny, width: nw, height: nh });
+		});
 	}
 
 	function handleResizeEnd() {
@@ -165,7 +182,7 @@
 <div
 	bind:this={wrapperEl}
 	class="absolute select-none"
-	style="left:{element.x}px; top:{element.y}px; width:{element.width}px; height:{element.height}px; z-index:{element.zIndex}; transform:rotate({rotation}deg); transform-origin:center center;"
+	style="left:{element.x}px; top:{element.y}px; width:{element.width}px; height:{element.height}px; z-index:{element.zIndex}; transform:rotate({rotation}deg); transform-origin:center center; will-change:{dragging || resizing ? 'transform' : 'auto'};"
 	onmousedown={handleMouseDown}
 	ondblclick={handleDblClick}
 	oncontextmenu={handleContextMenuEvt}

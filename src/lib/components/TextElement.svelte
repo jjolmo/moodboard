@@ -62,17 +62,21 @@
 		window.addEventListener('mouseup', handleDragEnd);
 	}
 
+	let dragRaf = 0;
 	function handleDragMove(e: MouseEvent) {
 		if (!dragging) return;
-		const dx = (e.clientX - dragStart.x) / zoom;
-		const dy = (e.clientY - dragStart.y) / zoom;
-		let nx = dragStart.elemX + dx;
-		let ny = dragStart.elemY + dy;
-		if (!rotation) {
-			const snapped = appStore.snapPosition(element.id, nx, ny, element.width, element.height);
-			nx = snapped.x; ny = snapped.y;
-		}
-		appStore.updateElement(element.id, { x: nx, y: ny });
+		cancelAnimationFrame(dragRaf);
+		dragRaf = requestAnimationFrame(() => {
+			const dx = (e.clientX - dragStart.x) / zoom;
+			const dy = (e.clientY - dragStart.y) / zoom;
+			let nx = dragStart.elemX + dx;
+			let ny = dragStart.elemY + dy;
+			if (!rotation) {
+				const snapped = appStore.snapPosition(element.id, nx, ny, element.width, element.height);
+				nx = snapped.x; ny = snapped.y;
+			}
+			appStore.updateElement(element.id, { x: nx, y: ny });
+		});
 	}
 
 	function handleDragEnd() {
