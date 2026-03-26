@@ -28,13 +28,15 @@
 		window.addEventListener('mouseup', handleDragEnd);
 	}
 
+	let dragRaf = 0;
 	function handleDragMove(e: MouseEvent) {
 		if (!dragging) return;
-		const dx = (e.clientX - dragStart.x) / zoom;
-		const dy = (e.clientY - dragStart.y) / zoom;
-		appStore.updateElement(element.id, {
-			x: dragStart.elemX + dx,
-			y: dragStart.elemY + dy
+		cancelAnimationFrame(dragRaf);
+		dragRaf = requestAnimationFrame(() => {
+			appStore.updateElement(element.id, {
+				x: dragStart.elemX + (e.clientX - dragStart.x) / zoom,
+				y: dragStart.elemY + (e.clientY - dragStart.y) / zoom
+			});
 		});
 	}
 
