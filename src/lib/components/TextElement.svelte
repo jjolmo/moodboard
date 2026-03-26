@@ -104,7 +104,10 @@
 
 	function handleTextInput(e: Event) {
 		const target = e.target as HTMLDivElement;
-		appStore.updateElement(element.id, { data: { ...data, text: target.innerText } });
+		appStore.updateElement(element.id, {
+			data: { ...data, text: target.innerText },
+			height: Math.max(24, target.scrollHeight)
+		});
 	}
 
 	function handleTextKeydown(e: KeyboardEvent) {
@@ -172,7 +175,7 @@
 <div
 	bind:this={wrapperDiv}
 	class="absolute"
-	style="left:{element.x}px; top:{element.y}px; width:{element.width}px; height:{element.height}px; z-index:{element.zIndex}; transform:rotate({rotation}deg); transform-origin:center center; user-select:{editing ? 'text' : 'none'};"
+	style="left:{element.x}px; top:{element.y}px; width:{element.width}px; min-height:{element.height}px; z-index:{element.zIndex}; transform:rotate({rotation}deg); transform-origin:center center; user-select:{editing ? 'text' : 'none'};"
 	onmousedown={handleMouseDown}
 	ondblclick={handleDblClick}
 >
