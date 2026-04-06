@@ -5,7 +5,7 @@
 	import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 	import { generateId, now } from '$lib/utils/ids';
 	import { debounce } from '$lib/utils/debounce';
-	import { readImage } from '@tauri-apps/plugin-clipboard-manager';
+	import { readImage, readText } from '@tauri-apps/plugin-clipboard-manager';
 	import type { CanvasElement, ArrowData, CircleData, TextData } from '$lib/types';
 	import ImageElement from './ImageElement.svelte';
 	import ArrowElement from './ArrowElement.svelte';
@@ -376,12 +376,12 @@
 		}
 	}
 
-	const IMAGE_URL_RE = /^https?:\/\/.+\.(png|jpe?g|gif|webp|bmp|avif|svg)(\?.*)?$/i;
+	const IMAGE_URL_RE = /^https?:\/\/\S+$/i;
 
 	async function handlePaste(): Promise<boolean> {
 		if (!appStore.activeProjectId || !appStore.activeVibeId) return false;
 
-		// Try Tauri clipboard plugin first (image data)
+		// 1. Try Tauri clipboard plugin for image data
 		try {
 			const img = await readImage();
 			const rgba = await img.rgba();
@@ -400,10 +400,20 @@
 				if (blob) return await pasteImageBlob(blob);
 			}
 		} catch (e) {
-			console.warn('[paste] Tauri clipboard plugin failed:', e);
+			console.warn('[paste] Tauri readImage failed:', e);
 		}
 
-		// Fallback: browser Clipboard API (image data or text URL)
+		// 2. Try Tauri clipboard plugin for text (URL)
+		try {
+			const text = await readText();
+			if (text && IMAGE_URL_RE.test(text.trim())) {
+				return await pasteImageUrl(text.trim());
+			}
+		} catch (e) {
+			console.warn('[paste] Tauri readText failed:', e);
+		}
+
+		// 3. Fallback: browser Clipboard API
 		try {
 			const items = await navigator.clipboard.read();
 			for (const item of items) {
@@ -412,7 +422,6 @@
 					const blob = await item.getType(imageType);
 					return await pasteImageBlob(blob);
 				}
-				// Check for text that looks like an image URL
 				if (item.types.includes('text/plain')) {
 					const textBlob = await item.getType('text/plain');
 					const text = (await textBlob.text()).trim();
@@ -423,16 +432,6 @@
 			}
 		} catch (e) {
 			console.warn('[paste] Browser clipboard API failed:', e);
-		}
-
-		// Last fallback: try reading text from clipboard for URL
-		try {
-			const text = await navigator.clipboard.readText();
-			if (text && IMAGE_URL_RE.test(text.trim())) {
-				return await pasteImageUrl(text.trim());
-			}
-		} catch (e) {
-			console.warn('[paste] Clipboard readText failed:', e);
 		}
 
 		return false;
