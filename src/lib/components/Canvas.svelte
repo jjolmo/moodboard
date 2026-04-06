@@ -5,6 +5,7 @@
 	import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 	import { generateId, now } from '$lib/utils/ids';
 	import { debounce } from '$lib/utils/debounce';
+	import { readImage } from '@tauri-apps/plugin-clipboard-manager';
 	import type { CanvasElement, ArrowData, CircleData, TextData } from '$lib/types';
 	import ImageElement from './ImageElement.svelte';
 	import ArrowElement from './ArrowElement.svelte';
@@ -312,6 +313,161 @@
 		if (zoomTooltipTimeout) clearTimeout(zoomTooltipTimeout);
 	});
 
+	// ── Clipboard paste (Ctrl+V) ────────────────────────────
+
+	async function pasteImageBlob(blob: Blob): Promise<boolean> {
+		const arrayBuf = await blob.arrayBuffer();
+		const bytes = Array.from(new Uint8Array(arrayBuf));
+
+		const filename: string = await invoke('save_image_bytes', {
+			projectId: appStore.activeProjectId,
+			data: bytes,
+			ext: 'png'
+		});
+		const size = await getImageSize(appStore.activeProjectId!, filename);
+
+		const rect = viewport?.getBoundingClientRect();
+		const cx = ((rect?.width ?? 800) / 2 - panX) / zoom;
+		const cy = ((rect?.height ?? 600) / 2 - panY) / zoom;
+
+		const maxZ = Math.max(...(appStore.elements.map((el) => el.zIndex) ?? [0]), 0);
+		const element: CanvasElement = {
+			id: generateId(),
+			type: 'image',
+			x: cx - size.w / 2,
+			y: cy - size.h / 2,
+			width: size.w,
+			height: size.h,
+			zIndex: maxZ + 1,
+			data: { filename }
+		};
+		appStore.addElement(element);
+		return true;
+	}
+
+	async function pasteImageUrl(url: string): Promise<boolean> {
+		try {
+			const filename: string = await invoke('download_image_url', {
+				projectId: appStore.activeProjectId,
+				url
+			});
+			const size = await getImageSize(appStore.activeProjectId!, filename);
+
+			const rect = viewport?.getBoundingClientRect();
+			const cx = ((rect?.width ?? 800) / 2 - panX) / zoom;
+			const cy = ((rect?.height ?? 600) / 2 - panY) / zoom;
+
+			const maxZ = Math.max(...(appStore.elements.map((el) => el.zIndex) ?? [0]), 0);
+			const element: CanvasElement = {
+				id: generateId(),
+				type: 'image',
+				x: cx - size.w / 2,
+				y: cy - size.h / 2,
+				width: size.w,
+				height: size.h,
+				zIndex: maxZ + 1,
+				data: { filename }
+			};
+			appStore.addElement(element);
+			return true;
+		} catch (e) {
+			console.warn('[paste] URL download failed:', e);
+			return false;
+		}
+	}
+
+	const IMAGE_URL_RE = /^https?:\/\/.+\.(png|jpe?g|gif|webp|bmp|avif|svg)(\?.*)?$/i;
+
+	async function handlePaste(): Promise<boolean> {
+		if (!appStore.activeProjectId || !appStore.activeVibeId) return false;
+
+		// Try Tauri clipboard plugin first (image data)
+		try {
+			const img = await readImage();
+			const rgba = await img.rgba();
+			const { width, height } = await img.size();
+			if (rgba && rgba.length > 0) {
+				const canvas = document.createElement('canvas');
+				canvas.width = width;
+				canvas.height = height;
+				const ctx = canvas.getContext('2d')!;
+				const imageData = new ImageData(new Uint8ClampedArray(rgba), width, height);
+				ctx.putImageData(imageData, 0, 0);
+
+				const blob = await new Promise<Blob | null>((resolve) =>
+					canvas.toBlob(resolve, 'image/png')
+				);
+				if (blob) return await pasteImageBlob(blob);
+			}
+		} catch (e) {
+			console.warn('[paste] Tauri clipboard plugin failed:', e);
+		}
+
+		// Fallback: browser Clipboard API (image data or text URL)
+		try {
+			const items = await navigator.clipboard.read();
+			for (const item of items) {
+				const imageType = item.types.find((t) => t.startsWith('image/'));
+				if (imageType) {
+					const blob = await item.getType(imageType);
+					return await pasteImageBlob(blob);
+				}
+				// Check for text that looks like an image URL
+				if (item.types.includes('text/plain')) {
+					const textBlob = await item.getType('text/plain');
+					const text = (await textBlob.text()).trim();
+					if (IMAGE_URL_RE.test(text)) {
+						return await pasteImageUrl(text);
+					}
+				}
+			}
+		} catch (e) {
+			console.warn('[paste] Browser clipboard API failed:', e);
+		}
+
+		// Last fallback: try reading text from clipboard for URL
+		try {
+			const text = await navigator.clipboard.readText();
+			if (text && IMAGE_URL_RE.test(text.trim())) {
+				return await pasteImageUrl(text.trim());
+			}
+		} catch (e) {
+			console.warn('[paste] Clipboard readText failed:', e);
+		}
+
+		return false;
+	}
+
+	// ── Native paste event (captures clipboard images from OS) ──
+
+	async function handleNativePaste(e: ClipboardEvent) {
+		if (!appStore.activeProjectId || !appStore.activeVibeId) return;
+		const items = e.clipboardData?.items;
+		if (!items) return;
+
+		for (const item of Array.from(items)) {
+			if (item.type.startsWith('image/')) {
+				e.preventDefault();
+				const blob = item.getAsFile();
+				if (blob) {
+					const pasted = await pasteImageBlob(blob);
+					if (!pasted) console.warn('[paste] Failed to paste image from native event');
+				}
+				return;
+			}
+			if (item.type === 'text/plain') {
+				item.getAsString(async (text) => {
+					const trimmed = text.trim();
+					if (IMAGE_URL_RE.test(trimmed)) {
+						e.preventDefault();
+						await pasteImageUrl(trimmed);
+					}
+				});
+				return;
+			}
+		}
+	}
+
 	// ── HTML5 drop fallback ─────────────────────────────────
 
 	function handleDragOver(e: DragEvent) {
@@ -456,8 +612,12 @@
 			return;
 		}
 		if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-			e.preventDefault();
-			appStore.pasteElements();
+			// Don't preventDefault here — let the native 'paste' event fire
+			// so handleNativePaste can access clipboardData.
+			// handlePaste tries Tauri plugin + browser Clipboard API as fallbacks.
+			handlePaste().then((pasted) => {
+				if (!pasted) appStore.pasteElements();
+			});
 			return;
 		}
 
@@ -513,7 +673,7 @@
 	);
 </script>
 
-<svelte:window onkeydown={handleKeydown} onkeyup={(e) => { if (e.code === 'Space') spaceHeld = false; }} />
+<svelte:window onkeydown={handleKeydown} onkeyup={(e) => { if (e.code === 'Space') spaceHeld = false; }} onpaste={handleNativePaste} />
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div

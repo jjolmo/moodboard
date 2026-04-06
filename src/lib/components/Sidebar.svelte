@@ -18,7 +18,7 @@
 		e.preventDefault();
 		contextMenu = { x: e.clientX, y: e.clientY, vibeId };
 	}
-	function closeContextMenu() { contextMenu = null; }
+	function closeContextMenu() { contextMenu = null; showColorPicker = false; }
 	function handleRename() {
 		if (!contextMenu || !appStore.activeProject) return;
 		const vibe = appStore.activeProject.vibes.find(v => v.id === contextMenu!.vibeId);
@@ -30,6 +30,17 @@
 		appStore.deleteVibe(appStore.activeProjectId, contextMenu.vibeId);
 		contextMenu = null;
 	}
+
+	const COLORS = ['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#14b8a6','#f97316','#06b6d4'];
+	let showColorPicker = $state(false);
+
+	function handleChangeColor(color: string) {
+		if (!contextMenu || !appStore.activeProjectId) return;
+		appStore.updateVibeColor(appStore.activeProjectId, contextMenu.vibeId, color);
+		contextMenu = null;
+		showColorPicker = false;
+	}
+	function toggleColorPicker() { showColorPicker = !showColorPicker; }
 	function handleNewVibe() {
 		if (!appStore.activeProjectId) return;
 		const count = (appStore.activeProject?.vibes.length ?? 0) + 1;
@@ -93,6 +104,19 @@
 {#if contextMenu}
 	<div class="ctx-menu" style="left:{contextMenu.x}px;top:{contextMenu.y}px">
 		<button class="ctx-item" onclick={handleRename}>Rename</button>
+		<button class="ctx-item" onclick={toggleColorPicker}>Color</button>
+		{#if showColorPicker}
+			<div class="color-grid">
+				{#each COLORS as color}
+					<button
+						class="color-swatch"
+						style="background:{color}"
+						onclick={() => handleChangeColor(color)}
+						title={color}
+					></button>
+				{/each}
+			</div>
+		{/if}
 		{#if (appStore.activeProject?.vibes.length ?? 0) > 1}
 			<button class="ctx-item ctx-danger" onclick={handleDelete}>Delete</button>
 		{/if}
@@ -174,4 +198,13 @@
 	.ctx-item:hover { background: var(--bg-hover); }
 	.ctx-danger { color: #ef4444; }
 	.ctx-danger:hover { background: rgba(239,68,68,0.08); }
+	.color-grid {
+		display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
+		padding: 6px 8px;
+	}
+	.color-swatch {
+		width: 22px; height: 22px; border-radius: 6px; border: 2px solid transparent;
+		cursor: pointer; transition: all 0.12s;
+	}
+	.color-swatch:hover { border-color: var(--text-primary); transform: scale(1.15); }
 </style>
