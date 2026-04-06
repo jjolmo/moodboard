@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { appStore } from '$lib/stores/app.svelte';
-	import { invoke } from '@tauri-apps/api/core';
 	import type { MoodImageData } from '$lib/types';
 
 	const menu = $derived(appStore.imageContextMenu);
@@ -15,11 +14,25 @@
 			onclick={() => { appStore.toggleAlwaysOnTop(menu.elementId); appStore.closeImageContextMenu(); }}>
 			{#if element.alwaysOnTop}<span style="margin-right:4px">&#10003;</span>{/if}Always on top
 		</button>
+		{#if element.type === 'image'}
+			<button class="ctx-btn"
+				onclick={() => {
+					appStore.selectElement(menu.elementId);
+					appStore.copyAsReference();
+					appStore.closeImageContextMenu();
+				}}>
+				Copy as reference
+			</button>
+		{/if}
 		<button class="ctx-btn ctx-danger"
 			onclick={() => {
 				if (element.type === 'image' && appStore.activeProjectId) {
 					const d = element.data as MoodImageData;
-					invoke('delete_image', { projectId: appStore.activeProjectId, filename: d.filename }).catch(console.error);
+					if (appStore.countFilenameUsages(d.filename, menu.elementId) === 0) {
+						import('@tauri-apps/api/core').then(({ invoke }) =>
+							invoke('delete_image', { projectId: appStore.activeProjectId, filename: d.filename }).catch(console.error)
+						);
+					}
 				}
 				appStore.removeElement(menu.elementId);
 				appStore.closeImageContextMenu();
@@ -33,7 +46,7 @@
 	.ctx-overlay {
 		position: fixed;
 		z-index: 200000;
-		width: 160px;
+		width: 180px;
 		padding: 4px;
 		border-radius: 12px;
 		background: var(--bg-secondary);

@@ -51,11 +51,22 @@
 
 	let dragPeers: { id: string; startX: number; startY: number }[] = [];
 
+	const hasActiveTag = $derived(appStore.activeTagId !== null);
+	const elementHasActiveTag = $derived(
+		appStore.activeTagId ? (element.tagIds ?? []).includes(appStore.activeTagId) : false
+	);
+
 	function handleMouseDown(e: MouseEvent) {
 		if (e.button === 1) return; // middle click reserved for pan
 		if (appStore.activeTool !== 'select') return;
 		e.stopPropagation(); e.preventDefault();
 		appStore.closeImageContextMenu();
+
+		// Tagging mode: toggle tag on click
+		if (hasActiveTag && appStore.activeTagId) {
+			appStore.toggleTagOnElement(element.id, appStore.activeTagId);
+			return;
+		}
 		// If already selected and part of multi-selection, don't reset selection
 		if (!appStore.isSelected(element.id)) {
 			appStore.selectElement(element.id, e.ctrlKey || e.metaKey);
@@ -213,6 +224,31 @@
 		<div style="position:absolute;top:4px;right:4px;background:var(--ui-accent);color:white;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700;pointer-events:none;">
 			TOP
 		</div>
+	{/if}
+
+	<!-- Reference indicator -->
+	{#if element.isReference}
+		<div style="position:absolute;top:4px;left:4px;background:rgba(0,0,0,0.6);color:white;border-radius:4px;padding:2px 5px;font-size:10px;pointer-events:none;display:flex;align-items:center;gap:3px;">
+			<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+			REF
+		</div>
+	{/if}
+
+	<!-- Tag dots -->
+	{#if element.tagIds?.length}
+		<div style="position:absolute;bottom:4px;left:4px;display:flex;gap:3px;pointer-events:none;">
+			{#each element.tagIds as tagId}
+				{@const tag = appStore.tags.find(t => t.id === tagId)}
+				{#if tag}
+					<div style="width:8px;height:8px;border-radius:50%;background:{tag.color};box-shadow:0 1px 2px rgba(0,0,0,0.3);" title={tag.name}></div>
+				{/if}
+			{/each}
+		</div>
+	{/if}
+
+	<!-- Tagging mode highlight -->
+	{#if hasActiveTag}
+		<div style="position:absolute;inset:0;border-radius:4px;border:3px solid {elementHasActiveTag ? '#10b981' : 'transparent'};pointer-events:none;transition:border-color 0.15s;"></div>
 	{/if}
 
 	{#if isSelected}

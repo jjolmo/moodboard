@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { AppState, Project, Vibe, CanvasElement, Tool, Theme } from '$lib/types';
+import type { AppState, Project, Vibe, CanvasElement, Tool, Theme, Tag, MoodImageData } from '$lib/types';
 import { generateId, now } from '$lib/utils/ids';
 import { debounce } from '$lib/utils/debounce';
 
@@ -32,6 +32,8 @@ let roundedCorners = $state(true);
 let zoomSensitivity = $state(5); // 1-10, maps to zoom factor
 let imageContextMenu = $state<{ x: number; y: number; elementId: string } | null>(null);
 let clipboard = $state<{ elements: CanvasElement[]; isCut: boolean }>({ elements: [], isCut: false });
+let activeTagId = $state<string | null>(null);
+let tagGridViewId = $state<string | null>(null);
 
 // ── Derived ─────────────────────────────────────────────────
 
@@ -39,6 +41,7 @@ const activeProject = $derived(projects.find((p) => p.id === activeProjectId) ??
 const activeVibe = $derived(activeProject?.vibes.find((v) => v.id === activeVibeId) ?? null);
 const elements = $derived(activeVibe?.elements ?? []);
 const selectedElements = $derived(elements.filter((e) => selectedElementIds.has(e.id)));
+const tags = $derived(activeProject?.tags ?? []);
 
 // ── Persistence ─────────────────────────────────────────────
 
@@ -511,6 +514,142 @@ async function importMoo(): Promise<void> {
 	triggerSave();
 }
 
+// ── Safe image deletion ─────────────────────────────────────
+
+function countFilenameUsages(filename: string, excludeElementId?: string): number {
+	if (!activeProject) return 0;
+	let count = 0;
+	for (const vibe of activeProject.vibes) {
+		for (const el of vibe.elements) {
+			if (el.type === 'image' && (el.data as MoodImageData).filename === filename && el.id !== excludeElementId) {
+				count++;
+			}
+		}
+	}
+	return count;
+}
+
+function safeDeleteImageFiles(imageElements: CanvasElement[], excludeIds: Set<string>): void {
+	if (!activeProjectId) return;
+	for (const el of imageElements) {
+		if (el.type !== 'image') continue;
+		const filename = (el.data as MoodImageData).filename;
+		if (countFilenameUsages(filename, el.id) === 0) {
+			// Check no other element in excludeIds uses this filename
+			const otherUsesIt = imageElements.some(other => other.id !== el.id && other.type === 'image' && (other.data as MoodImageData).filename === filename);
+			if (!otherUsesIt) {
+				invoke('delete_image', { projectId: activeProjectId, filename }).catch(console.error);
+			}
+		}
+	}
+}
+
+// ── Tag actions ─────────────────────────────────────────────
+
+function createTag(name: string): string {
+	if (!activeProjectId) return '';
+	const tag: Tag = { id: generateId(), name, color: randomColor(), createdAt: now() };
+	projects = projects.map((p) =>
+		p.id === activeProjectId ? { ...p, tags: [...(p.tags ?? []), tag], updatedAt: now() } : p
+	);
+	triggerSave();
+	return tag.id;
+}
+
+function deleteTag(tagId: string): void {
+	if (!activeProjectId) return;
+	// Remove tag from project and from all elements across all vibes
+	projects = projects.map((p) => {
+		if (p.id !== activeProjectId) return p;
+		return {
+			...p,
+			tags: (p.tags ?? []).filter((t) => t.id !== tagId),
+			vibes: p.vibes.map((v) => ({
+				...v,
+				elements: v.elements.map((e) =>
+					e.tagIds?.includes(tagId) ? { ...e, tagIds: e.tagIds.filter((id) => id !== tagId) } : e
+				)
+			})),
+			updatedAt: now()
+		};
+	});
+	if (activeTagId === tagId) activeTagId = null;
+	if (tagGridViewId === tagId) tagGridViewId = null;
+	triggerSave();
+}
+
+function renameTag(tagId: string, name: string): void {
+	if (!activeProjectId) return;
+	projects = projects.map((p) =>
+		p.id === activeProjectId ? { ...p, tags: (p.tags ?? []).map((t) => t.id === tagId ? { ...t, name } : t), updatedAt: now() } : p
+	);
+	triggerSave();
+}
+
+function updateTagColor(tagId: string, color: string): void {
+	if (!activeProjectId) return;
+	projects = projects.map((p) =>
+		p.id === activeProjectId ? { ...p, tags: (p.tags ?? []).map((t) => t.id === tagId ? { ...t, color } : t), updatedAt: now() } : p
+	);
+	triggerSave();
+}
+
+function setActiveTag(tagId: string | null): void {
+	activeTagId = activeTagId === tagId ? null : tagId;
+}
+
+function toggleTagOnElement(elementId: string, tagId: string): void {
+	if (!activeProjectId || !activeVibeId) return;
+	projects = projects.map((p) =>
+		p.id === activeProjectId ? { ...p, vibes: p.vibes.map((v) =>
+			v.id === activeVibeId ? { ...v, elements: v.elements.map((e) => {
+				if (e.id !== elementId) return e;
+				const tags = e.tagIds ?? [];
+				return { ...e, tagIds: tags.includes(tagId) ? tags.filter((id) => id !== tagId) : [...tags, tagId] };
+			}), updatedAt: now() } : v
+		), updatedAt: now() } : p
+	);
+	triggerSave();
+}
+
+function openTagGridView(tagId: string): void { tagGridViewId = tagId; }
+function closeTagGridView(): void { tagGridViewId = null; }
+
+function getTaggedImages(tagId: string): { element: CanvasElement; vibeId: string; vibeName: string }[] {
+	if (!activeProject) return [];
+	const results: { element: CanvasElement; vibeId: string; vibeName: string }[] = [];
+	for (const vibe of activeProject.vibes) {
+		for (const el of vibe.elements) {
+			if (el.type === 'image' && el.tagIds?.includes(tagId)) {
+				results.push({ element: el, vibeId: vibe.id, vibeName: vibe.name });
+			}
+		}
+	}
+	return results;
+}
+
+function getTagUsageCount(tagId: string): number {
+	if (!activeProject) return 0;
+	let count = 0;
+	for (const vibe of activeProject.vibes) {
+		for (const el of vibe.elements) {
+			if (el.tagIds?.includes(tagId)) count++;
+		}
+	}
+	return count;
+}
+
+// ── Reference copy ──────────────────────────────────────────
+
+function copyAsReference(): void {
+	if (selectedElementIds.size === 0) return;
+	const refs = JSON.parse(JSON.stringify(selectedElements)) as CanvasElement[];
+	for (const el of refs) {
+		if (el.type === 'image') el.isReference = true;
+	}
+	clipboard = { elements: refs, isCut: false };
+}
+
 // ── Export store ─────────────────────────────────────────────
 
 export const appStore = {
@@ -537,6 +676,9 @@ export const appStore = {
 	get roundedCorners() { return roundedCorners; },
 	get imageContextMenu() { return imageContextMenu; },
 	get initialized() { return initialized; },
+	get tags() { return tags; },
+	get activeTagId() { return activeTagId; },
+	get tagGridViewId() { return tagGridViewId; },
 
 	loadAppState, triggerSave,
 	createProject, deleteProject, renameProject, selectProject,
@@ -548,5 +690,8 @@ export const appStore = {
 	toggleFocusMode, toggleRoundedCorners, openLightbox, closeLightbox, toggleAlwaysOnTop, openImageContextMenu, closeImageContextMenu,
 	saveViewport, getViewport,
 	pushUndo, undo,
-	setTheme, toggleSettings, exportMoo, importMoo
+	setTheme, toggleSettings, exportMoo, importMoo,
+	createTag, deleteTag, renameTag, updateTagColor, setActiveTag, toggleTagOnElement,
+	openTagGridView, closeTagGridView, getTaggedImages, getTagUsageCount,
+	copyAsReference, safeDeleteImageFiles, countFilenameUsages
 };

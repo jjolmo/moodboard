@@ -622,17 +622,14 @@
 
 		if ((e.key === 'Delete' || e.key === 'Backspace') && appStore.selectedElementIds.size > 0) {
 			e.preventDefault();
-			// Delete image files for selected image elements
-			for (const elem of appStore.selectedElements) {
-				if (elem.type === 'image' && appStore.activeProjectId) {
-					const data = elem.data as { filename: string };
-					invoke('delete_image', { projectId: appStore.activeProjectId, filename: data.filename }).catch(console.error);
-				}
-			}
+			// Safe delete: only remove image files if no other elements reference them
+			const imageElements = appStore.selectedElements.filter(e => e.type === 'image');
+			appStore.safeDeleteImageFiles(imageElements, appStore.selectedElementIds);
 			appStore.removeSelectedElements();
 		}
 
 		if (e.key === 'Escape') {
+			if (appStore.activeTagId) { appStore.setActiveTag(null); return; }
 			if (appStore.focusMode) { appStore.toggleFocusMode(); return; }
 			appStore.selectElement(null);
 			appStore.setTool('select');
