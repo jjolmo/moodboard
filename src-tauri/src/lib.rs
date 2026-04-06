@@ -199,6 +199,92 @@ fn copy_image(
 }
 
 #[tauri::command]
+fn save_image_bytes(
+    app: tauri::AppHandle,
+    project_id: String,
+    data: Vec<u8>,
+    ext: String,
+) -> Result<String, String> {
+    let allowed = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"];
+    let ext = ext.to_lowercase();
+    if !allowed.contains(&ext.as_str()) {
+        return Err(format!("Unsupported image format: {}", ext));
+    }
+
+    let filename = format!("{}.{}", Uuid::new_v4(), ext);
+    let dest_dir = projects_dir(&app).join(&project_id).join("images");
+    if !dest_dir.exists() {
+        fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
+    }
+
+    let dest = dest_dir.join(&filename);
+    fs::write(&dest, &data).map_err(|e| e.to_string())?;
+
+    Ok(filename)
+}
+
+#[tauri::command]
+async fn download_image_url(
+    app: tauri::AppHandle,
+    project_id: String,
+    url: String,
+) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+
+    // Detect extension from content-type or URL
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+
+    let ext = if content_type.contains("png") {
+        "png"
+    } else if content_type.contains("gif") {
+        "gif"
+    } else if content_type.contains("webp") {
+        "webp"
+    } else if content_type.contains("bmp") {
+        "bmp"
+    } else if content_type.contains("avif") {
+        "avif"
+    } else if content_type.contains("jpeg") || content_type.contains("jpg") {
+        "jpg"
+    } else {
+        // Try from URL extension
+        let path = url.split('?').next().unwrap_or(&url);
+        if path.ends_with(".png") { "png" }
+        else if path.ends_with(".gif") { "gif" }
+        else if path.ends_with(".webp") { "webp" }
+        else if path.ends_with(".avif") { "avif" }
+        else { "jpg" }
+    };
+
+    let data = resp.bytes().await.map_err(|e| e.to_string())?;
+
+    let filename = format!("{}.{}", Uuid::new_v4(), ext);
+    let dest_dir = projects_dir(&app).join(&project_id).join("images");
+    if !dest_dir.exists() {
+        fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
+    }
+
+    let dest = dest_dir.join(&filename);
+    fs::write(&dest, &data).map_err(|e| e.to_string())?;
+
+    Ok(filename)
+}
+
+#[tauri::command]
 fn delete_image(
     app: tauri::AppHandle,
     project_id: String,
@@ -399,6 +485,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
             #[cfg(target_os = "linux")]
             {
@@ -419,7 +506,9 @@ pub fn run() {
             save_project,
             delete_project,
             copy_image,
+            save_image_bytes,
             delete_image,
+            download_image_url,
             get_image_path,
             get_image_base64,
             export_moo,
