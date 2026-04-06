@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { appStore } from '$lib/stores/app.svelte';
 
+	// ── Vibe editing ────────────────────────────────
 	let editingId = $state<string | null>(null);
 	let editingValue = $state('');
 	let contextMenu = $state<{ x: number; y: number; vibeId: string } | null>(null);
@@ -17,8 +18,9 @@
 	function handleContextMenu(e: MouseEvent, vibeId: string) {
 		e.preventDefault();
 		contextMenu = { x: e.clientX, y: e.clientY, vibeId };
+		tagContextMenu = null;
 	}
-	function closeContextMenu() { contextMenu = null; showColorPicker = false; }
+	function closeContextMenu() { contextMenu = null; showColorPicker = false; tagContextMenu = null; }
 	function handleRename() {
 		if (!contextMenu || !appStore.activeProject) return;
 		const vibe = appStore.activeProject.vibes.find(v => v.id === contextMenu!.vibeId);
@@ -46,12 +48,63 @@
 		const count = (appStore.activeProject?.vibes.length ?? 0) + 1;
 		appStore.createVibe(appStore.activeProjectId, `Vibe ${count}`);
 	}
+
+	// ── Tag editing ─────────────────────────────────
+	let creatingTag = $state(false);
+	let newTagName = $state('');
+	let tagContextMenu = $state<{ x: number; y: number; tagId: string } | null>(null);
+	let editingTagId = $state<string | null>(null);
+	let editingTagValue = $state('');
+	let showTagColorPicker = $state(false);
+
+	function handleCreateTag() {
+		if (!newTagName.trim()) { creatingTag = false; return; }
+		appStore.createTag(newTagName.trim());
+		newTagName = '';
+		creatingTag = false;
+	}
+	function handleTagKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') handleCreateTag();
+		if (e.key === 'Escape') { creatingTag = false; newTagName = ''; }
+	}
+	function handleTagContextMenu(e: MouseEvent, tagId: string) {
+		e.preventDefault();
+		tagContextMenu = { x: e.clientX, y: e.clientY, tagId };
+		contextMenu = null;
+	}
+	function handleTagRename() {
+		if (!tagContextMenu) return;
+		const tag = appStore.tags.find(t => t.id === tagContextMenu!.tagId);
+		if (tag) { editingTagId = tag.id; editingTagValue = tag.name; }
+		tagContextMenu = null;
+	}
+	function finishTagEditing() {
+		if (!editingTagId || !editingTagValue.trim()) { editingTagId = null; return; }
+		appStore.renameTag(editingTagId, editingTagValue.trim());
+		editingTagId = null;
+	}
+	function handleTagEditKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') finishTagEditing();
+		if (e.key === 'Escape') editingTagId = null;
+	}
+	function handleDeleteTag() {
+		if (!tagContextMenu) return;
+		appStore.deleteTag(tagContextMenu.tagId);
+		tagContextMenu = null;
+	}
+	function handleTagChangeColor(color: string) {
+		if (!tagContextMenu) return;
+		appStore.updateTagColor(tagContextMenu.tagId, color);
+		tagContextMenu = null;
+		showTagColorPicker = false;
+	}
 </script>
 
 <svelte:window onclick={closeContextMenu} />
 
 {#if !appStore.sidebarCollapsed}
 <aside class="sidebar">
+	<!-- Vibes section -->
 	<div class="sidebar-header">
 		<span class="sidebar-label">Vibes</span>
 		<div style="display:flex;gap:4px">
@@ -81,6 +134,50 @@
 			</button>
 		{/each}
 	</nav>
+
+	<!-- Tags section -->
+	<div class="sidebar-divider"></div>
+	<div class="sidebar-header">
+		<span class="sidebar-label">Tags</span>
+		<div style="display:flex;gap:4px">
+			{#if appStore.activeTagId}
+				<button onclick={() => appStore.setActiveTag(null)} title="Exit tagging mode" class="sidebar-icon-btn" style="color:#10b981;font-size:10px;font-weight:700;">
+					✓
+				</button>
+			{/if}
+			<button onclick={() => { creatingTag = true; }} title="New Tag" class="sidebar-icon-btn">
+				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+			</button>
+		</div>
+	</div>
+
+	<nav class="sidebar-nav tag-nav">
+		{#if creatingTag}
+			<!-- svelte-ignore a11y_autofocus -->
+			<input type="text" bind:value={newTagName} onblur={handleCreateTag} onkeydown={handleTagKeydown}
+				class="vibe-edit" autofocus placeholder="Tag name..." style="margin:2px 0;" />
+		{/if}
+		{#each appStore.tags as tag}
+			<button
+				class="vibe-btn {appStore.activeTagId === tag.id ? 'tag-active' : ''}"
+				onclick={() => appStore.setActiveTag(tag.id)}
+				ondblclick={() => appStore.openTagGridView(tag.id)}
+				oncontextmenu={(e) => handleTagContextMenu(e, tag.id)}>
+				<span class="vibe-dot" style="background:{tag.color};border-radius:50%"></span>
+				{#if editingTagId === tag.id}
+					<!-- svelte-ignore a11y_autofocus -->
+					<input type="text" bind:value={editingTagValue} onblur={finishTagEditing} onkeydown={handleTagEditKeydown}
+						class="vibe-edit" autofocus onclick={(e) => e.stopPropagation()} />
+				{:else}
+					<span class="vibe-name">{tag.name}</span>
+					<span class="tag-count">{appStore.getTagUsageCount(tag.id)}</span>
+				{/if}
+			</button>
+		{/each}
+		{#if appStore.tags.length === 0 && !creatingTag}
+			<div style="padding:6px 10px;font-size:11px;color:var(--text-muted);">No tags yet</div>
+		{/if}
+	</nav>
 </aside>
 {:else}
 <div class="sidebar-collapsed">
@@ -101,6 +198,7 @@
 </div>
 {/if}
 
+<!-- Vibe context menu -->
 {#if contextMenu}
 	<div class="ctx-menu" style="left:{contextMenu.x}px;top:{contextMenu.y}px">
 		<button class="ctx-item" onclick={handleRename}>Rename</button>
@@ -108,18 +206,35 @@
 		{#if showColorPicker}
 			<div class="color-grid">
 				{#each COLORS as color}
-					<button
-						class="color-swatch"
-						style="background:{color}"
-						onclick={() => handleChangeColor(color)}
-						title={color}
-					></button>
+					<button class="color-swatch" style="background:{color}" onclick={() => handleChangeColor(color)} title={color}></button>
 				{/each}
 			</div>
 		{/if}
 		{#if (appStore.activeProject?.vibes.length ?? 0) > 1}
 			<button class="ctx-item ctx-danger" onclick={handleDelete}>Delete</button>
 		{/if}
+	</div>
+{/if}
+
+<!-- Tag context menu -->
+{#if tagContextMenu}
+	<div class="ctx-menu" style="left:{tagContextMenu.x}px;top:{tagContextMenu.y}px">
+		<button class="ctx-item" onclick={() => { appStore.setActiveTag(tagContextMenu!.tagId); tagContextMenu = null; }}>
+			{appStore.activeTagId === tagContextMenu.tagId ? 'Exit tagging' : 'Tag images'}
+		</button>
+		<button class="ctx-item" onclick={() => { appStore.openTagGridView(tagContextMenu!.tagId); tagContextMenu = null; }}>
+			View all
+		</button>
+		<button class="ctx-item" onclick={handleTagRename}>Rename</button>
+		<button class="ctx-item" onclick={() => { showTagColorPicker = !showTagColorPicker; }}>Color</button>
+		{#if showTagColorPicker}
+			<div class="color-grid">
+				{#each COLORS as color}
+					<button class="color-swatch" style="background:{color}" onclick={() => handleTagChangeColor(color)} title={color}></button>
+				{/each}
+			</div>
+		{/if}
+		<button class="ctx-item ctx-danger" onclick={handleDeleteTag}>Delete</button>
 	</div>
 {/if}
 
@@ -151,8 +266,13 @@
 	}
 	.sidebar-icon-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 	.sidebar-nav {
-		flex: 1; overflow-y: auto; padding: 0 8px 12px 8px;
+		overflow-y: auto; padding: 0 8px 12px 8px;
 		display: flex; flex-direction: column; gap: 2px;
+	}
+	.sidebar-nav:first-of-type { flex: 1; }
+	.tag-nav { flex: 1; min-height: 0; }
+	.sidebar-divider {
+		height: 1px; background: var(--ui-border); margin: 0 12px;
 	}
 	.vibe-btn {
 		display: flex; align-items: center; gap: 10px;
@@ -163,6 +283,10 @@
 	.vibe-btn:hover { background: var(--bg-hover); }
 	.vibe-btn.active {
 		background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600;
+	}
+	.vibe-btn.tag-active {
+		background: rgba(16,185,129,0.12); color: #10b981; font-weight: 600;
+		box-shadow: inset 0 0 0 1px rgba(16,185,129,0.3);
 	}
 	.vibe-dot {
 		width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
@@ -175,6 +299,10 @@
 		flex: 1; padding: 3px 8px; border-radius: 6px; border: none;
 		background: var(--bg-primary); color: var(--text-primary);
 		font-size: 13px; outline: none; box-shadow: 0 0 0 2px var(--ui-accent);
+	}
+	.tag-count {
+		font-size: 10px; color: var(--text-muted); background: var(--bg-tertiary);
+		padding: 1px 5px; border-radius: 8px; flex-shrink: 0;
 	}
 	.dot-btn {
 		display: flex; align-items: center; justify-content: center;

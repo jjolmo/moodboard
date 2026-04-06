@@ -8,11 +8,19 @@ export interface AppState {
 	sidebarCollapsed?: boolean;
 }
 
+export interface Tag {
+	id: string;
+	name: string;
+	color: string;
+	createdAt: number;
+}
+
 export interface Project {
 	id: string;
 	name: string;
 	lastOpenedVibeId: string | null;
 	vibes: Vibe[];
+	tags?: Tag[];
 	createdAt: number;
 	updatedAt: number;
 }
@@ -39,6 +47,8 @@ export interface CanvasElement {
 	zIndex: number;
 	rotation?: number;
 	alwaysOnTop?: boolean;
+	isReference?: boolean;
+	tagIds?: string[];
 	data: MoodImageData | ArrowData | CircleData | TextData;
 }
 

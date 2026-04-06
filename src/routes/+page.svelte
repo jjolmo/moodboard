@@ -7,6 +7,7 @@
 	import SettingsPanel from '$lib/components/SettingsPanel.svelte';
 	import Lightbox from '$lib/components/Lightbox.svelte';
 	import ImageContextMenu from '$lib/components/ImageContextMenu.svelte';
+	import TagGridView from '$lib/components/TagGridView.svelte';
 
 	onMount(() => {
 		appStore.loadAppState();
@@ -38,6 +39,7 @@
 		<SettingsPanel />
 		<Lightbox />
 		<ImageContextMenu />
+		<TagGridView />
 	</div>
 
 	<!-- Focus mode: floating exit button -->

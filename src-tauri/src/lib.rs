@@ -51,6 +51,8 @@ pub struct Project {
     pub name: String,
     pub last_opened_vibe_id: Option<String>,
     pub vibes: Vec<Vibe>,
+    #[serde(default)]
+    pub tags: Vec<serde_json::Value>,
     pub created_at: u64,
     pub updated_at: u64,
 }
@@ -60,7 +62,15 @@ pub struct Project {
 pub struct Vibe {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub color: Option<String>,
     pub elements: Vec<CanvasElement>,
+    #[serde(default)]
+    pub pan_x: Option<f64>,
+    #[serde(default)]
+    pub pan_y: Option<f64>,
+    #[serde(default)]
+    pub zoom: Option<f64>,
     pub created_at: u64,
     pub updated_at: u64,
 }
@@ -76,6 +86,14 @@ pub struct CanvasElement {
     pub width: f64,
     pub height: f64,
     pub z_index: i32,
+    #[serde(default)]
+    pub rotation: Option<f64>,
+    #[serde(default)]
+    pub always_on_top: Option<bool>,
+    #[serde(default)]
+    pub is_reference: Option<bool>,
+    #[serde(default)]
+    pub tag_ids: Option<Vec<String>>,
     pub data: serde_json::Value,
 }
 
