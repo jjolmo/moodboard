@@ -120,7 +120,7 @@
 	<nav class="sidebar-nav">
 		{#each appStore.activeProject?.vibes ?? [] as vibe}
 			<button
-				class="vibe-btn {appStore.activeVibeId === vibe.id ? 'active' : ''}"
+				class="vibe-btn {appStore.activeVibeId === vibe.id && !appStore.tagGridViewId ? 'active' : ''}"
 				onclick={() => appStore.selectVibe(vibe.id)}
 				oncontextmenu={(e) => handleContextMenu(e, vibe.id)}>
 				<span class="vibe-dot" style="background:{vibe.color ?? '#6366f1'}"></span>
@@ -159,7 +159,7 @@
 		{/if}
 		{#each appStore.tags as tag}
 			<button
-				class="vibe-btn {appStore.activeTagId === tag.id ? 'tag-active' : ''}"
+				class="vibe-btn {appStore.activeTagId === tag.id ? 'tag-active' : ''} {appStore.tagGridViewId === tag.id ? 'tag-viewing' : ''}"
 				onclick={() => appStore.setActiveTag(tag.id)}
 				ondblclick={() => appStore.openTagGridView(tag.id)}
 				oncontextmenu={(e) => handleTagContextMenu(e, tag.id)}>
@@ -202,14 +202,11 @@
 {#if contextMenu}
 	<div class="ctx-menu" style="left:{contextMenu.x}px;top:{contextMenu.y}px">
 		<button class="ctx-item" onclick={handleRename}>Rename</button>
-		<button class="ctx-item" onclick={toggleColorPicker}>Color</button>
-		{#if showColorPicker}
-			<div class="color-grid">
-				{#each COLORS as color}
-					<button class="color-swatch" style="background:{color}" onclick={() => handleChangeColor(color)} title={color}></button>
-				{/each}
-			</div>
-		{/if}
+		<div class="color-grid">
+			{#each COLORS as color}
+				<button class="color-swatch" style="background:{color}" onclick={() => handleChangeColor(color)} title={color}></button>
+			{/each}
+		</div>
 		{#if (appStore.activeProject?.vibes.length ?? 0) > 1}
 			<button class="ctx-item ctx-danger" onclick={handleDelete}>Delete</button>
 		{/if}
@@ -223,17 +220,14 @@
 			{appStore.activeTagId === tagContextMenu.tagId ? 'Exit tagging' : 'Tag images'}
 		</button>
 		<button class="ctx-item" onclick={() => { appStore.openTagGridView(tagContextMenu!.tagId); tagContextMenu = null; }}>
-			View all
+			View moodboard
 		</button>
 		<button class="ctx-item" onclick={handleTagRename}>Rename</button>
-		<button class="ctx-item" onclick={() => { showTagColorPicker = !showTagColorPicker; }}>Color</button>
-		{#if showTagColorPicker}
-			<div class="color-grid">
-				{#each COLORS as color}
-					<button class="color-swatch" style="background:{color}" onclick={() => handleTagChangeColor(color)} title={color}></button>
-				{/each}
-			</div>
-		{/if}
+		<div class="color-grid">
+			{#each COLORS as color}
+				<button class="color-swatch" style="background:{color}" onclick={() => handleTagChangeColor(color)} title={color}></button>
+			{/each}
+		</div>
 		<button class="ctx-item ctx-danger" onclick={handleDeleteTag}>Delete</button>
 	</div>
 {/if}
@@ -266,11 +260,11 @@
 	}
 	.sidebar-icon-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 	.sidebar-nav {
-		overflow-y: auto; padding: 0 8px 12px 8px;
+		overflow-y: auto; padding: 0 8px 8px 8px;
 		display: flex; flex-direction: column; gap: 2px;
+		flex-shrink: 0;
 	}
-	.sidebar-nav:first-of-type { flex: 1; }
-	.tag-nav { flex: 1; min-height: 0; }
+	.tag-nav { flex-shrink: 1; overflow-y: auto; }
 	.sidebar-divider {
 		height: 1px; background: var(--ui-border); margin: 0 12px;
 	}
@@ -287,6 +281,9 @@
 	.vibe-btn.tag-active {
 		background: rgba(16,185,129,0.12); color: #10b981; font-weight: 600;
 		box-shadow: inset 0 0 0 1px rgba(16,185,129,0.3);
+	}
+	.vibe-btn.tag-viewing {
+		background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600;
 	}
 	.vibe-dot {
 		width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;

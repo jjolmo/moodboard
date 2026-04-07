@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { AppState, Project, Vibe, CanvasElement, Tool, Theme, Tag, MoodImageData } from '$lib/types';
+import type { AppState, Project, Vibe, CanvasElement, Tool, Theme, Tag, MoodImageData, TagElementLayout } from '$lib/types';
 import { generateId, now } from '$lib/utils/ids';
 import { debounce } from '$lib/utils/debounce';
 
@@ -39,7 +39,10 @@ let tagGridViewId = $state<string | null>(null);
 
 const activeProject = $derived(projects.find((p) => p.id === activeProjectId) ?? null);
 const activeVibe = $derived(activeProject?.vibes.find((v) => v.id === activeVibeId) ?? null);
-const elements = $derived(activeVibe?.elements ?? []);
+const activeTag = $derived(tagGridViewId ? (activeProject?.tags ?? []).find(t => t.id === tagGridViewId) ?? null : null);
+let tagViewElements = $state<CanvasElement[]>([]);
+
+const elements = $derived(tagGridViewId ? tagViewElements : (activeVibe?.elements ?? []));
 const selectedElements = $derived(elements.filter((e) => selectedElementIds.has(e.id)));
 const tags = $derived(activeProject?.tags ?? []);
 
@@ -58,7 +61,7 @@ async function loadAppState(): Promise<void> {
 		if (state.animateGifs !== undefined) animateGifs = state.animateGifs;
 		if (state.roundedCorners !== undefined) roundedCorners = state.roundedCorners;
 		if (state.sidebarCollapsed !== undefined) sidebarCollapsed = state.sidebarCollapsed;
-		if ((state as any).zoomSensitivity !== undefined) zoomSensitivity = (state as any).zoomSensitivity;
+		if (state.zoomSensitivity !== undefined) zoomSensitivity = state.zoomSensitivity;
 
 		if (state.lastProjectId && projects.some((p) => p.id === state.lastProjectId)) {
 			activeProjectId = state.lastProjectId;
@@ -225,6 +228,7 @@ function updateVibeColor(projectId: string, vibeId: string, color: string): void
 }
 
 function selectVibe(vibeId: string): void {
+	tagGridViewId = null; // Exit tag view when switching vibes
 	activeVibeId = vibeId;
 	selectedElementIds = new Set();
 	if (activeProjectId) {
@@ -248,13 +252,51 @@ function addElement(element: CanvasElement): void {
 }
 
 function updateElement(elementId: string, updates: Partial<CanvasElement>): void {
-	if (!activeProjectId || !activeVibeId) return;
+	if (!activeProjectId) return;
+
+	// In tag view, update the tag layout positions
+	if (tagGridViewId) {
+		updateTagLayout(elementId, updates);
+		return;
+	}
+
+	if (!activeVibeId) return;
 	projects = projects.map((p) =>
 		p.id === activeProjectId ? { ...p, vibes: p.vibes.map((v) =>
 			v.id === activeVibeId ? { ...v, elements: v.elements.map((e) =>
 				e.id === elementId ? { ...e, ...updates } : e
 			), updatedAt: now() } : v
 		), updatedAt: now() } : p
+	);
+	triggerSave();
+}
+
+function updateTagLayout(elementId: string, updates: Partial<CanvasElement>): void {
+	if (!activeProjectId || !tagGridViewId) return;
+	projects = projects.map((p) => {
+		if (p.id !== activeProjectId) return p;
+		return {
+			...p,
+			tags: (p.tags ?? []).map((t) => {
+				if (t.id !== tagGridViewId) return t;
+				const layout = (t.layout ?? []).map((l) => {
+					if (l.elementId !== elementId) return l;
+					return {
+						...l,
+						x: updates.x ?? l.x,
+						y: updates.y ?? l.y,
+						width: updates.width ?? l.width,
+						height: updates.height ?? l.height,
+					};
+				});
+				return { ...t, layout };
+			}),
+			updatedAt: now()
+		};
+	});
+	// Update the in-memory tag view elements
+	tagViewElements = tagViewElements.map(el =>
+		el.id === elementId ? { ...el, ...updates } : el
 	);
 	triggerSave();
 }
@@ -311,9 +353,9 @@ function bringToFront(elementId: string): void {
 }
 
 function arrangeInGrid(): void {
-	if (!activeVibe || selectedElementIds.size < 2) return;
-	pushUndo();
-	const selected = activeVibe.elements.filter(e => selectedElementIds.has(e.id));
+	if (selectedElementIds.size < 2) return;
+	if (!tagGridViewId) pushUndo();
+	const selected = elements.filter(e => selectedElementIds.has(e.id));
 	if (selected.length < 2) return;
 
 	// Find top-left of selection as anchor
@@ -434,7 +476,21 @@ function toggleAlwaysOnTop(elementId: string): void {
 // ── Viewport persistence ────────────────────────────────────
 
 function saveViewport(pX: number, pY: number, z: number): void {
-	if (!activeProjectId || !activeVibeId) return;
+	if (!activeProjectId) return;
+
+	// Save viewport for tag view
+	if (tagGridViewId) {
+		projects = projects.map((p) => {
+			if (p.id !== activeProjectId) return p;
+			return { ...p, tags: (p.tags ?? []).map((t) =>
+				t.id === tagGridViewId ? { ...t, panX: pX, panY: pY, zoom: z } : t
+			) };
+		});
+		triggerSave();
+		return;
+	}
+
+	if (!activeVibeId) return;
 	projects = projects.map((p) =>
 		p.id === activeProjectId ? { ...p, vibes: p.vibes.map((v) =>
 			v.id === activeVibeId ? { ...v, panX: pX, panY: pY, zoom: z } : v
@@ -444,6 +500,13 @@ function saveViewport(pX: number, pY: number, z: number): void {
 }
 
 function getViewport(): { panX: number; panY: number; zoom: number } {
+	if (activeTag) {
+		return {
+			panX: activeTag.panX ?? 0,
+			panY: activeTag.panY ?? 0,
+			zoom: activeTag.zoom ?? 1,
+		};
+	}
 	return {
 		panX: activeVibe?.panX ?? 0,
 		panY: activeVibe?.panY ?? 0,
@@ -612,8 +675,120 @@ function toggleTagOnElement(elementId: string, tagId: string): void {
 	triggerSave();
 }
 
-function openTagGridView(tagId: string): void { tagGridViewId = tagId; }
-function closeTagGridView(): void { tagGridViewId = null; }
+function openTagGridView(tagId: string): void {
+	if (!activeProject || !activeProjectId) return;
+	const tag = (activeProject.tags ?? []).find(t => t.id === tagId);
+	if (!tag) return;
+
+	// Collect all tagged images across vibes
+	const tagged: { element: CanvasElement; vibeId: string }[] = [];
+	for (const vibe of activeProject.vibes) {
+		for (const el of vibe.elements) {
+			if (el.type === 'image' && el.tagIds?.includes(tagId)) {
+				tagged.push({ element: el, vibeId: vibe.id });
+			}
+		}
+	}
+
+	// Check which ones already have a layout entry
+	const existingLayout = tag.layout ?? [];
+	// Clean layout: remove entries for elements no longer tagged
+	const taggedIds = new Set(tagged.map(t => t.element.id));
+	const cleanedLayout = existingLayout.filter(l => taggedIds.has(l.elementId));
+
+	// Find new items that need grid positions
+	const existingIds = new Set(cleanedLayout.map(l => l.elementId));
+	const newItems = tagged.filter(t => !existingIds.has(t.element.id));
+
+	// Generate grid positions for new items with uniform cell size
+	let newLayoutEntries: TagElementLayout[] = [];
+	if (newItems.length > 0) {
+		const gap = 30;
+		const cellSize = 300;
+		const cols = Math.max(1, Math.ceil(Math.sqrt(tagged.length)));
+		let idx = cleanedLayout.length;
+		newLayoutEntries = newItems.map((item) => {
+			const col = idx % cols;
+			const row = Math.floor(idx / cols);
+			idx++;
+			const ar = item.element.width / item.element.height;
+			const w = ar >= 1 ? cellSize : cellSize * ar;
+			const h = ar >= 1 ? cellSize / ar : cellSize;
+			return {
+				elementId: item.element.id,
+				vibeId: item.vibeId,
+				x: 100 + col * (cellSize + gap) + (cellSize - w) / 2,
+				y: 100 + row * (cellSize + gap) + (cellSize - h) / 2,
+				width: w,
+				height: h,
+			};
+		});
+	}
+
+	// Always update layout (clean stale + add new)
+	const finalLayout = [...cleanedLayout, ...newLayoutEntries];
+	if (finalLayout.length !== existingLayout.length || newItems.length > 0) {
+		projects = projects.map((p) => {
+			if (p.id !== activeProjectId) return p;
+			return {
+				...p,
+				tags: (p.tags ?? []).map((t) =>
+					t.id === tagId ? { ...t, layout: finalLayout } : t
+				),
+				updatedAt: now()
+			};
+		});
+		triggerSave();
+	}
+
+	selectedElementIds = new Set();
+	tagGridViewId = tagId;
+
+	// Build tag view elements immediately
+	rebuildTagViewElements(tagId);
+
+	// Always auto-fit viewport to show all images when opening tag view
+	if (tagViewElements.length > 0) {
+		const minX = Math.min(...tagViewElements.map(e => e.x));
+		const minY = Math.min(...tagViewElements.map(e => e.y));
+		const maxX = Math.max(...tagViewElements.map(e => e.x + e.width));
+		const maxY = Math.max(...tagViewElements.map(e => e.y + e.height));
+		const contentW = maxX - minX;
+		const contentH = maxY - minY;
+		// Fit to ~80% of a 1200x800 viewport
+		const fitZoom = Math.min(0.8, 960 / contentW, 640 / contentH);
+		const newPanX = -minX * fitZoom + 50;
+		const newPanY = -minY * fitZoom + 50;
+		projects = projects.map(p => p.id !== activeProjectId ? p : {
+			...p,
+			tags: (p.tags ?? []).map(t => t.id !== tagId ? t : { ...t, panX: newPanX, panY: newPanY, zoom: fitZoom })
+		});
+		triggerSave();
+	}
+}
+function rebuildTagViewElements(tagId: string): void {
+	const project = projects.find(p => p.id === activeProjectId);
+	if (!project) { tagViewElements = []; return; }
+	const tag = (project.tags ?? []).find(t => t.id === tagId);
+	if (!tag) { tagViewElements = []; return; }
+	const layout = tag.layout ?? [];
+	const result: CanvasElement[] = [];
+	for (const vibe of project.vibes) {
+		for (const el of vibe.elements) {
+			if (el.type === 'image' && el.tagIds?.includes(tagId)) {
+				const pos = layout.find(l => l.elementId === el.id && l.vibeId === vibe.id);
+				if (pos) {
+					result.push({ ...el, x: pos.x, y: pos.y, width: pos.width, height: pos.height });
+				} else {
+					result.push({ ...el });
+				}
+			}
+		}
+	}
+	tagViewElements = result;
+}
+
+function closeTagGridView(): void { tagGridViewId = null; tagViewElements = []; selectedElementIds = new Set(); }
 
 function getTaggedImages(tagId: string): { element: CanvasElement; vibeId: string; vibeName: string }[] {
 	if (!activeProject) return [];
