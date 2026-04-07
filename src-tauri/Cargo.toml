@@ -1,6 +1,6 @@
 [package]
 name = "simple-moodboard"
-version = "0.2.0"
+version = "0.9.1"
 edition = "2021"
 description = "Cross-platform moodboard application"
 
