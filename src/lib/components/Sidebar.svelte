@@ -95,6 +95,7 @@
 	// ── Folder editing ──────────────────────────────
 	let folderContextMenu = $state<{ x: number; y: number; path: string } | null>(null);
 	let syncingFolder = $state<string | null>(null);
+	const folderVibeIds = $derived(new Set(appStore.watchedFolders.map(f => f.vibeId)));
 
 	function handleFolderContextMenu(e: MouseEvent, path: string) {
 		e.preventDefault();
@@ -145,7 +146,7 @@
 	</div>
 
 	<nav class="sidebar-nav">
-		{#each appStore.activeProject?.vibes ?? [] as vibe}
+		{#each (appStore.activeProject?.vibes ?? []).filter(v => !folderVibeIds.has(v.id)) as vibe}
 			<button
 				class="vibe-btn {appStore.activeVibeId === vibe.id && !appStore.tagGridViewId ? 'active' : ''}"
 				onclick={() => appStore.selectVibe(vibe.id)}
