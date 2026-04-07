@@ -55,6 +55,8 @@ pub struct Project {
     pub vibes: Vec<Vibe>,
     #[serde(default)]
     pub tags: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub watched_folders: Vec<serde_json::Value>,
     pub created_at: u64,
     pub updated_at: u64,
 }
@@ -354,6 +356,59 @@ fn get_image_base64(app: tauri::AppHandle, project_id: String, filename: String)
     Ok(format!("data:{};base64,{}", mime, B64.encode(&bytes)))
 }
 
+// ── Folder scanning ─────────────────────────────────────────
+
+#[tauri::command]
+fn scan_folder_images(path: String) -> Result<Vec<String>, String> {
+    let root = PathBuf::from(&path);
+    if !root.is_dir() {
+        return Err(format!("Not a directory: {}", path));
+    }
+    let allowed_exts = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif", "svg"];
+    let mut images: Vec<String> = Vec::new();
+    fn walk(dir: &std::path::Path, exts: &[&str], out: &mut Vec<String>) {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_dir() {
+                    walk(&p, exts, out);
+                } else if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+                    if exts.contains(&ext.to_lowercase().as_str()) {
+                        out.push(p.to_string_lossy().to_string());
+                    }
+                }
+            }
+        }
+    }
+    walk(&root, &allowed_exts, &mut images);
+    images.sort();
+    Ok(images)
+}
+
+#[tauri::command]
+fn copy_image_from_path(
+    app: tauri::AppHandle,
+    source_path: String,
+    project_id: String,
+) -> Result<String, String> {
+    let source = PathBuf::from(&source_path);
+    if !source.exists() {
+        return Err("Source file does not exist".to_string());
+    }
+    let ext = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("png")
+        .to_lowercase();
+    let filename = format!("{}.{}", Uuid::new_v4(), ext);
+    let dest_dir = projects_dir(&app).join(&project_id).join("images");
+    if !dest_dir.exists() {
+        fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
+    }
+    fs::copy(&source, dest_dir.join(&filename)).map_err(|e| e.to_string())?;
+    Ok(filename)
+}
+
 // ── .moo export/import ──────────────────────────────────────
 
 /// A .moo file is a JSON bundle containing the project data + base64-encoded images.
@@ -536,6 +591,8 @@ pub fn run() {
             updater::check_for_updates,
             updater::download_and_apply_update,
             install_desktop_file,
+            scan_folder_images,
+            copy_image_from_path,
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]
