@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { AppState, Project, Vibe, CanvasElement, Tool, Theme, Tag, MoodImageData, TagElementLayout } from '$lib/types';
+import type { AppState, Project, Vibe, CanvasElement, Tool, Theme, Tag, MoodImageData, TagElementLayout, WatchedFolder } from '$lib/types';
 import { generateId, now } from '$lib/utils/ids';
 import { debounce } from '$lib/utils/debounce';
 
@@ -83,6 +83,9 @@ async function loadAppState(): Promise<void> {
 		}
 
 		initialized = true;
+
+		// Auto-sync watched folders on startup
+		syncAllWatchedFolders().catch(console.error);
 	} catch (e) {
 		console.error('Failed to load app state:', e);
 		setTheme('light');
@@ -825,6 +828,137 @@ function copyAsReference(): void {
 	clipboard = { elements: refs, isCut: false };
 }
 
+// ── Watched folders ─────────────────────────────────────────
+
+const watchedFolders = $derived(activeProject?.watchedFolders ?? []);
+
+async function addWatchedFolder(): Promise<void> {
+	if (!activeProjectId || !activeProject) return;
+	const { open } = await import('@tauri-apps/plugin-dialog');
+	const selected = await open({ directory: true, multiple: false, title: 'Select folder to watch' });
+	if (!selected) return;
+	const folderPath = typeof selected === 'string' ? selected : selected;
+
+	// Check if already watching this folder
+	if ((activeProject.watchedFolders ?? []).some(f => f.path === folderPath)) return;
+
+	// Create a vibe for this folder
+	const folderName = folderPath.split('/').pop() || folderPath.split('\\').pop() || 'Folder';
+	const vibeId = createVibe(activeProjectId, `📁 ${folderName}`);
+
+	const folder: WatchedFolder = {
+		path: folderPath,
+		vibeId,
+		knownFiles: {},
+		lastSyncedAt: now()
+	};
+
+	projects = projects.map(p =>
+		p.id === activeProjectId ? { ...p, watchedFolders: [...(p.watchedFolders ?? []), folder], updatedAt: now() } : p
+	);
+	triggerSave();
+
+	// Immediately sync
+	await syncWatchedFolder(folderPath);
+}
+
+async function removeWatchedFolder(folderPath: string): Promise<void> {
+	if (!activeProjectId) return;
+	projects = projects.map(p =>
+		p.id === activeProjectId ? { ...p, watchedFolders: (p.watchedFolders ?? []).filter(f => f.path !== folderPath), updatedAt: now() } : p
+	);
+	triggerSave();
+}
+
+async function syncWatchedFolder(folderPath: string): Promise<number> {
+	if (!activeProjectId || !activeProject) return 0;
+	const folder = (activeProject.watchedFolders ?? []).find(f => f.path === folderPath);
+	if (!folder) return 0;
+
+	let imageFiles: string[];
+	try {
+		imageFiles = await invoke('scan_folder_images', { path: folderPath });
+	} catch (e) {
+		console.error('Failed to scan folder:', e);
+		return 0;
+	}
+
+	// Find new files not already tracked
+	const knownPaths = new Set(Object.keys(folder.knownFiles));
+	const newFiles = imageFiles.filter(f => !knownPaths.has(f));
+	if (newFiles.length === 0) {
+		// Update lastSyncedAt
+		projects = projects.map(p =>
+			p.id === activeProjectId ? { ...p, watchedFolders: (p.watchedFolders ?? []).map(f =>
+				f.path === folderPath ? { ...f, lastSyncedAt: now() } : f
+			), updatedAt: now() } : p
+		);
+		triggerSave();
+		return 0;
+	}
+
+	// Copy each new file and add to the vibe
+	const vibe = activeProject.vibes.find(v => v.id === folder.vibeId);
+	if (!vibe) return 0;
+
+	const existingElements = vibe.elements;
+	const maxZ = existingElements.length > 0 ? Math.max(...existingElements.map(e => e.zIndex)) : 0;
+	const gap = 30;
+	const cellSize = 300;
+	const totalCount = existingElements.length + newFiles.length;
+	const cols = Math.max(1, Math.ceil(Math.sqrt(totalCount)));
+	let idx = existingElements.length;
+
+	const newKnownFiles: Record<string, string> = { ...folder.knownFiles };
+	const newElements: CanvasElement[] = [];
+
+	for (const filePath of newFiles) {
+		try {
+			const filename: string = await invoke('copy_image_from_path', {
+				sourcePath: filePath,
+				projectId: activeProjectId
+			});
+			const elId = generateId();
+			const col = idx % cols;
+			const row = Math.floor(idx / cols);
+			newElements.push({
+				id: elId,
+				type: 'image',
+				x: 100 + col * (cellSize + gap),
+				y: 100 + row * (cellSize + gap),
+				width: cellSize,
+				height: cellSize,
+				zIndex: maxZ + 1 + (idx - existingElements.length),
+				data: { filename } as MoodImageData
+			});
+			newKnownFiles[filePath] = elId;
+			idx++;
+		} catch (e) {
+			console.error('Failed to copy image:', filePath, e);
+		}
+	}
+
+	if (newElements.length > 0) {
+		projects = projects.map(p =>
+			p.id === activeProjectId ? { ...p, vibes: p.vibes.map(v =>
+				v.id === folder.vibeId ? { ...v, elements: [...v.elements, ...newElements], updatedAt: now() } : v
+			), watchedFolders: (p.watchedFolders ?? []).map(f =>
+				f.path === folderPath ? { ...f, knownFiles: newKnownFiles, lastSyncedAt: now() } : f
+			), updatedAt: now() } : p
+		);
+		triggerSave();
+	}
+
+	return newElements.length;
+}
+
+async function syncAllWatchedFolders(): Promise<void> {
+	if (!activeProject) return;
+	for (const folder of (activeProject.watchedFolders ?? [])) {
+		await syncWatchedFolder(folder.path);
+	}
+}
+
 // ── Export store ─────────────────────────────────────────────
 
 export const appStore = {
@@ -868,5 +1002,7 @@ export const appStore = {
 	setTheme, toggleSettings, exportMoo, importMoo,
 	createTag, deleteTag, renameTag, updateTagColor, setActiveTag, toggleTagOnElement,
 	openTagGridView, closeTagGridView, getTaggedImages, getTagUsageCount,
-	copyAsReference, safeDeleteImageFiles, countFilenameUsages
+	copyAsReference, safeDeleteImageFiles, countFilenameUsages,
+	get watchedFolders() { return watchedFolders; },
+	addWatchedFolder, removeWatchedFolder, syncWatchedFolder, syncAllWatchedFolders
 };

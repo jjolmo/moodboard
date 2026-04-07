@@ -20,7 +20,7 @@
 		contextMenu = { x: e.clientX, y: e.clientY, vibeId };
 		tagContextMenu = null;
 	}
-	function closeContextMenu() { contextMenu = null; showColorPicker = false; tagContextMenu = null; }
+	function closeContextMenu() { contextMenu = null; showColorPicker = false; tagContextMenu = null; folderContextMenu = null; }
 	function handleRename() {
 		if (!contextMenu || !appStore.activeProject) return;
 		const vibe = appStore.activeProject.vibes.find(v => v.id === contextMenu!.vibeId);
@@ -92,6 +92,33 @@
 		appStore.deleteTag(tagContextMenu.tagId);
 		tagContextMenu = null;
 	}
+	// ── Folder editing ──────────────────────────────
+	let folderContextMenu = $state<{ x: number; y: number; path: string } | null>(null);
+	let syncingFolder = $state<string | null>(null);
+
+	function handleFolderContextMenu(e: MouseEvent, path: string) {
+		e.preventDefault();
+		folderContextMenu = { x: e.clientX, y: e.clientY, path };
+		contextMenu = null;
+		tagContextMenu = null;
+	}
+	async function handleSyncFolder() {
+		if (!folderContextMenu) return;
+		const path = folderContextMenu.path;
+		folderContextMenu = null;
+		syncingFolder = path;
+		try {
+			await appStore.syncWatchedFolder(path);
+		} finally {
+			syncingFolder = null;
+		}
+	}
+	function handleRemoveFolder() {
+		if (!folderContextMenu) return;
+		appStore.removeWatchedFolder(folderContextMenu.path);
+		folderContextMenu = null;
+	}
+
 	function handleTagChangeColor(color: string) {
 		if (!tagContextMenu) return;
 		appStore.updateTagColor(tagContextMenu.tagId, color);
@@ -133,6 +160,33 @@
 				{/if}
 			</button>
 		{/each}
+	</nav>
+
+	<!-- Watched Folders section -->
+	<div class="sidebar-divider"></div>
+	<div class="sidebar-header">
+		<span class="sidebar-label">Folders</span>
+		<div style="display:flex;gap:4px">
+			<button onclick={() => appStore.addWatchedFolder()} title="Watch folder" class="sidebar-icon-btn">
+				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+			</button>
+		</div>
+	</div>
+	<nav class="sidebar-nav folder-nav">
+		{#each appStore.watchedFolders as folder}
+			{@const folderName = folder.path.split('/').pop() || folder.path}
+			<button
+				class="vibe-btn {appStore.activeVibeId === folder.vibeId && !appStore.tagGridViewId ? 'active' : ''}"
+				onclick={() => appStore.selectVibe(folder.vibeId)}
+				oncontextmenu={(e) => handleFolderContextMenu(e, folder.path)}
+				title={folder.path}>
+				<span style="font-size:13px;flex-shrink:0">📁</span>
+				<span class="vibe-name">{folderName}</span>
+			</button>
+		{/each}
+		{#if appStore.watchedFolders.length === 0}
+			<div style="padding:6px 10px;font-size:11px;color:var(--text-muted);">No folders</div>
+		{/if}
 	</nav>
 
 	<!-- Tags section -->
@@ -232,6 +286,16 @@
 	</div>
 {/if}
 
+<!-- Folder context menu -->
+{#if folderContextMenu}
+	<div class="ctx-menu" style="left:{folderContextMenu.x}px;top:{folderContextMenu.y}px">
+		<button class="ctx-item" onclick={handleSyncFolder}>
+			{syncingFolder === folderContextMenu.path ? 'Syncing...' : 'Sync now'}
+		</button>
+		<button class="ctx-item ctx-danger" onclick={handleRemoveFolder}>Remove folder</button>
+	</div>
+{/if}
+
 <style>
 	.sidebar {
 		display: flex; flex-direction: column; height: 100%;
@@ -265,6 +329,7 @@
 		flex-shrink: 0;
 	}
 	.tag-nav { flex-shrink: 1; overflow-y: auto; }
+	.folder-nav { flex-shrink: 0; }
 	.sidebar-divider {
 		height: 1px; background: var(--ui-border); margin: 0 12px;
 	}

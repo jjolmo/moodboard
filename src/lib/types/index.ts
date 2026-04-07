@@ -35,6 +35,7 @@ export interface Project {
 	lastOpenedVibeId: string | null;
 	vibes: Vibe[];
 	tags?: Tag[];
+	watchedFolders?: WatchedFolder[];
 	createdAt: number;
 	updatedAt: number;
 }
@@ -89,6 +90,14 @@ export interface TextData {
 	fontFamily: string;
 	color: string;
 	align: 'left' | 'center' | 'right';
+}
+
+export interface WatchedFolder {
+	path: string;
+	vibeId: string;
+	/** Map of absolute file path -> elementId for tracking which files are already added */
+	knownFiles: Record<string, string>;
+	lastSyncedAt: number;
 }
 
 export type Tool = 'select' | 'arrow' | 'circle' | 'text';
