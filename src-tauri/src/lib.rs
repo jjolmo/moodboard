@@ -42,6 +42,8 @@ pub struct AppState {
     pub rounded_corners: Option<bool>,
     #[serde(default)]
     pub sidebar_collapsed: Option<bool>,
+    #[serde(default)]
+    pub zoom_sensitivity: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -535,6 +537,15 @@ pub fn run() {
             updater::download_and_apply_update,
             install_desktop_file,
         ])
+        .setup(|app| {
+            #[cfg(debug_assertions)]
+            {
+                if let Some(w) = app.get_webview_window("main") {
+                    w.open_devtools();
+                }
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

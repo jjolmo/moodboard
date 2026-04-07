@@ -52,11 +52,15 @@
 		appStore.saveViewport(panX, panY, zoom);
 	}, 300);
 
-	// Restore viewport when vibe changes
+	// Restore viewport when vibe or tag view changes
+	let lastTagViewId = $state<string | null>(null);
 	$effect(() => {
 		const vid = appStore.activeVibeId;
-		if (vid && vid !== lastVibeId) {
-			lastVibeId = vid;
+		const tvid = appStore.tagGridViewId;
+		const elCount = appStore.elements.length;
+		if ((vid && vid !== lastVibeId) || tvid !== lastTagViewId) {
+			lastVibeId = vid ?? lastVibeId;
+			lastTagViewId = tvid;
 			const vp = appStore.getViewport();
 			panX = vp.panX;
 			panY = vp.panY;
@@ -629,6 +633,7 @@
 		}
 
 		if (e.key === 'Escape') {
+			if (appStore.tagGridViewId) { appStore.closeTagGridView(); return; }
 			if (appStore.activeTagId) { appStore.setActiveTag(null); return; }
 			if (appStore.focusMode) { appStore.toggleFocusMode(); return; }
 			appStore.selectElement(null);

@@ -6,12 +6,26 @@ export interface AppState {
 	animateGifs?: boolean;
 	roundedCorners?: boolean;
 	sidebarCollapsed?: boolean;
+	zoomSensitivity?: number;
+}
+
+export interface TagElementLayout {
+	elementId: string;
+	vibeId: string;
+	x: number;
+	y: number;
+	width: number;
+	height: number;
 }
 
 export interface Tag {
 	id: string;
 	name: string;
 	color: string;
+	layout?: TagElementLayout[];
+	panX?: number;
+	panY?: number;
+	zoom?: number;
 	createdAt: number;
 }
 

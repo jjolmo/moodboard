@@ -248,7 +248,8 @@
 
 	<!-- Tagging mode highlight -->
 	{#if hasActiveTag}
-		<div style="position:absolute;inset:0;border-radius:4px;border:3px solid {elementHasActiveTag ? '#10b981' : 'transparent'};pointer-events:none;transition:border-color 0.15s;"></div>
+		{@const activeTag = appStore.tags.find(t => t.id === appStore.activeTagId)}
+		<div style="position:absolute;inset:-10px;border-radius:12px;border:10px solid {elementHasActiveTag ? (activeTag?.color ?? '#10b981') : 'rgba(200,200,200,0.2)'};pointer-events:none;transition:border-color 0.15s;{elementHasActiveTag ? `box-shadow:0 0 24px ${activeTag?.color ?? '#10b981'}80;` : ''}"></div>
 	{/if}
 
 	{#if isSelected}
