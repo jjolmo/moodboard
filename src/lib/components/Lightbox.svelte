@@ -66,7 +66,7 @@
 
 		{#if imageSrc}
 			<img src={imageSrc} alt="" draggable="false" decoding="async"
-				style="transform:translate({panX}px,{panY}px) scale({zoom}); transform-origin:center center; max-width:none; pointer-events:none; user-select:none;" />
+				style="transform:translate({panX}px,{panY}px) scale({zoom}); transform-origin:center center; max-width:none; pointer-events:none; user-select:none; image-rendering:pixelated;" />
 		{/if}
 	</div>
 {/if}

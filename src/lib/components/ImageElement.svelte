@@ -308,7 +308,7 @@
 >
 	{#if displaySrc}
 		<img src={displaySrc} alt="" draggable="false" loading="lazy" decoding="async"
-			style="pointer-events:none; width:100%; height:100%; border-radius:{appStore.roundedCorners ? '6px' : '0'}; object-fit:contain;" />
+			style="pointer-events:none; width:100%; height:100%; border-radius:{appStore.roundedCorners ? '6px' : '0'}; object-fit:contain; image-rendering:pixelated;" />
 	{:else}
 		<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;border-radius:{appStore.roundedCorners ? '6px' : '0'};background:var(--bg-tertiary);color:var(--text-muted);">
 			Loading...
