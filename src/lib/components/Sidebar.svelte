@@ -213,21 +213,30 @@
 				class="vibe-edit" autofocus placeholder="Tag name..." style="margin:2px 0;" />
 		{/if}
 		{#each appStore.tags as tag}
-			<button
-				class="vibe-btn {appStore.activeTagId === tag.id ? 'tag-active' : ''} {appStore.tagGridViewId === tag.id ? 'tag-viewing' : ''}"
-				onclick={() => appStore.setActiveTag(tag.id)}
-				ondblclick={() => appStore.openTagGridView(tag.id)}
-				oncontextmenu={(e) => handleTagContextMenu(e, tag.id)}>
-				<span class="vibe-dot" style="background:{tag.color};border-radius:50%"></span>
-				{#if editingTagId === tag.id}
-					<!-- svelte-ignore a11y_autofocus -->
-					<input type="text" bind:value={editingTagValue} onblur={finishTagEditing} onkeydown={handleTagEditKeydown}
-						class="vibe-edit" autofocus onclick={(e) => e.stopPropagation()} />
-				{:else}
-					<span class="vibe-name">{tag.name}</span>
-					<span class="tag-count">{appStore.getTagUsageCount(tag.id)}</span>
-				{/if}
-			</button>
+			<div class="tag-row {appStore.activeTagId === tag.id ? 'tag-active' : ''} {appStore.tagGridViewId === tag.id ? 'tag-viewing' : ''}">
+				<button
+					class="vibe-btn tag-main"
+					onclick={() => appStore.openTagGridView(tag.id)}
+					oncontextmenu={(e) => handleTagContextMenu(e, tag.id)}>
+					<span class="vibe-dot" style="background:{tag.color};border-radius:50%"></span>
+					{#if editingTagId === tag.id}
+						<!-- svelte-ignore a11y_autofocus -->
+						<input type="text" bind:value={editingTagValue} onblur={finishTagEditing} onkeydown={handleTagEditKeydown}
+							class="vibe-edit" autofocus onclick={(e) => e.stopPropagation()} />
+					{:else}
+						<span class="vibe-name">{tag.name}</span>
+						<span class="tag-count">{appStore.getTagUsageCount(tag.id)}</span>
+					{/if}
+				</button>
+				<button class="tag-edit-btn" title={appStore.activeTagId === tag.id ? 'Exit tagging mode' : 'Enter tagging mode'}
+					onclick={(e) => { e.stopPropagation(); appStore.setActiveTag(appStore.activeTagId === tag.id ? null : tag.id); }}>
+					{#if appStore.activeTagId === tag.id}
+						<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+					{:else}
+						<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+					{/if}
+				</button>
+			</div>
 		{/each}
 		{#if appStore.tags.length === 0 && !creatingTag}
 			<div style="padding:6px 10px;font-size:11px;color:var(--text-muted);">No tags yet</div>
@@ -344,13 +353,27 @@
 	.vibe-btn.active {
 		background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600;
 	}
-	.vibe-btn.tag-active {
+	.tag-row {
+		display: flex; align-items: center; gap: 2px; border-radius: 8px;
+	}
+	.tag-row .tag-main { flex: 1; }
+	.tag-row.tag-active .tag-main {
 		background: rgba(16,185,129,0.12); color: #10b981; font-weight: 600;
 		box-shadow: inset 0 0 0 1px rgba(16,185,129,0.3);
 	}
-	.vibe-btn.tag-viewing {
+	.tag-row.tag-viewing .tag-main {
 		background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600;
 	}
+	.tag-edit-btn {
+		display: flex; align-items: center; justify-content: center;
+		width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0;
+		border: none; background: transparent; color: var(--text-muted);
+		cursor: pointer; opacity: 0; transition: opacity 0.12s, background 0.12s, color 0.12s;
+		margin-right: 4px;
+	}
+	.tag-row:hover .tag-edit-btn { opacity: 1; }
+	.tag-edit-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+	.tag-row.tag-active .tag-edit-btn { opacity: 1; color: #10b981; }
 	.vibe-dot {
 		width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
 	}

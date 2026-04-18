@@ -330,13 +330,16 @@
 		</div>
 	{/if}
 
-	<!-- Tag dots -->
-	{#if element.tagIds?.length}
-		<div style="position:absolute;bottom:4px;left:4px;display:flex;gap:3px;pointer-events:none;">
+	<!-- Tag chips (only in tagging mode, inside the image so they never clip) -->
+	{#if hasActiveTag && element.tagIds?.length}
+		<div style="position:absolute;top:6px;left:6px;right:6px;display:flex;flex-wrap:wrap;gap:4px;pointer-events:none;z-index:2;max-width:calc(100% - 12px);">
 			{#each element.tagIds as tagId}
 				{@const tag = appStore.tagMap.get(tagId)}
 				{#if tag}
-					<div style="width:8px;height:8px;border-radius:50%;background:{tag.color};box-shadow:0 1px 2px rgba(0,0,0,0.3);" title={tag.name}></div>
+					<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.95);color:#111;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,0.25);max-width:100%;overflow:hidden;">
+						<span style="width:7px;height:7px;border-radius:50%;background:{tag.color};flex-shrink:0;"></span>
+						<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{tag.name}</span>
+					</span>
 				{/if}
 			{/each}
 		</div>
