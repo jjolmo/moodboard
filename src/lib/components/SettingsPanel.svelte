@@ -91,6 +91,13 @@
 						<span style="position:absolute;top:2px;{appStore.gpuLayer ? 'right:2px' : 'left:2px'};width:16px;height:16px;border-radius:50%;background:white;transition:all 0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.2);"></span>
 					</button>
 				</div>
+				<div style="display:flex;align-items:center;justify-content:space-between" title="Shows an on-screen FPS/performance HUD. Useful to diagnose slowness.">
+					<span style="font-size:13px;color:var(--text-secondary)">Performance HUD</span>
+					<button onclick={() => appStore.togglePerfHud()}
+						style="width:36px;height:20px;border-radius:10px;border:none;cursor:pointer;position:relative;background:{appStore.perfHud ? 'var(--ui-accent)' : 'var(--bg-tertiary)'};transition:background 0.2s;">
+						<span style="position:absolute;top:2px;{appStore.perfHud ? 'right:2px' : 'left:2px'};width:16px;height:16px;border-radius:50%;background:white;transition:all 0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.2);"></span>
+					</button>
+				</div>
 			</div>
 		</div>
 
