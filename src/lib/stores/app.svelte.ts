@@ -32,6 +32,7 @@ let lightboxElementId = $state<string | null>(null);
 let roundedCorners = $state(true);
 let zoomSensitivity = $state(5); // 1-10, maps to zoom factor
 let gpuLayer = $state(true);
+let perfHud = $state(false);
 let imageContextMenu = $state<{ x: number; y: number; elementId: string } | null>(null);
 let clipboard = $state<{ elements: CanvasElement[]; isCut: boolean }>({ elements: [], isCut: false });
 let activeTagId = $state<string | null>(null);
@@ -465,6 +466,7 @@ function setSnapDistance(d: number): void { snapDistance = Math.max(1, Math.min(
 function toggleFocusMode(): void { focusMode = !focusMode; }
 function toggleRoundedCorners(): void { roundedCorners = !roundedCorners; }
 function toggleGpuLayer(): void { gpuLayer = !gpuLayer; }
+function togglePerfHud(): void { perfHud = !perfHud; }
 function openLightbox(elementId: string): void { lightboxElementId = elementId; }
 function closeLightbox(): void { lightboxElementId = null; }
 function openImageContextMenu(x: number, y: number, elementId: string): void { imageContextMenu = { x, y, elementId }; }
@@ -1060,6 +1062,7 @@ export const appStore = {
 	get lightboxElement() { return lightboxElementId ? elements.find(e => e.id === lightboxElementId) ?? null : null; },
 	get roundedCorners() { return roundedCorners; },
 	get gpuLayer() { return gpuLayer; },
+	get perfHud() { return perfHud; },
 	get imageContextMenu() { return imageContextMenu; },
 	get initialized() { return initialized; },
 	get tags() { return tags; },
@@ -1074,7 +1077,7 @@ export const appStore = {
 	bringToFront, selectElement, isSelected, arrangeInGrid, copyElements, cutElements, pasteElements,
 	setTool, setShapeColor, toggleSidebar, toggleAnimateGifs,
 	toggleSnap, setSnapDistance, setZoomSensitivity, snapPosition,
-	toggleFocusMode, toggleRoundedCorners, toggleGpuLayer, openLightbox, closeLightbox, toggleAlwaysOnTop, openImageContextMenu, closeImageContextMenu,
+	toggleFocusMode, toggleRoundedCorners, toggleGpuLayer, togglePerfHud, openLightbox, closeLightbox, toggleAlwaysOnTop, openImageContextMenu, closeImageContextMenu,
 	saveViewport, getViewport,
 	pushUndo, undo,
 	setTheme, toggleSettings, exportMoo, importMoo,

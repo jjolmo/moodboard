@@ -11,6 +11,7 @@
 	import ArrowElement from './ArrowElement.svelte';
 	import CircleElement from './CircleElement.svelte';
 	import TextElement from './TextElement.svelte';
+	import PerfHud from './PerfHud.svelte';
 
 	const CANVAS_SIZE = 5000;
 
@@ -75,6 +76,7 @@
 		}, 120);
 	}
 
+	let cullMs = $state(0);
 	const visibleElements = $derived.by(() => {
 		if (!viewport) return appStore.elements;
 		const vw = viewportWidth;
@@ -82,15 +84,18 @@
 		const z = cullZoom;
 		const px = cullPanX;
 		const py = cullPanY;
+		const t0 = performance.now();
 		// Viewport bounds in canvas coordinates
 		const left = -px / z - CULL_MARGIN / z;
 		const top = -py / z - CULL_MARGIN / z;
 		const right = (vw - px) / z + CULL_MARGIN / z;
 		const bottom = (vh - py) / z + CULL_MARGIN / z;
-		return appStore.elements.filter(el => {
+		const result = appStore.elements.filter(el => {
 			const ex = el.x, ey = el.y, ew = el.width, eh = el.height;
 			return ex + ew > left && ex < right && ey + eh > top && ey < bottom;
 		});
+		cullMs = performance.now() - t0;
+		return result;
 	});
 
 	// Restore viewport when vibe or tag view changes
@@ -819,3 +824,5 @@
 		</div>
 	{/if}
 </div>
+
+<PerfHud total={appStore.elements.length} visible={visibleElements.length} {cullMs} {panX} {panY} {zoom} />
