@@ -76,7 +76,8 @@
 		}, 120);
 	}
 
-	let cullMs = $state(0);
+	// Non-reactive: the HUD polls it every frame via its own RAF loop
+	let cullMs = 0;
 	const visibleElements = $derived.by(() => {
 		if (!viewport) return appStore.elements;
 		const vw = viewportWidth;
@@ -766,7 +767,7 @@
 	onmousedown={handleViewportMouseDown}
 	onwheel={handleWheel}
 	role="application"
-	style="cursor: {cursorStyle}; background-color: var(--color-canvas-bg); background-image: radial-gradient(circle, var(--color-canvas-grid) 1px, transparent 1px); background-size: {30 * zoom}px {30 * zoom}px; background-position: {panX}px {panY}px;"
+	style="cursor: {cursorStyle}; background-color: var(--color-canvas-bg); {zoom >= 0.4 ? `background-image: radial-gradient(circle, var(--color-canvas-grid) 1px, transparent 1px); background-size: ${30 * zoom}px ${30 * zoom}px; background-position: ${panX}px ${panY}px;` : ''}"
 >
 	<!-- Zoom tooltip -->
 	{#if showZoomTooltip}
