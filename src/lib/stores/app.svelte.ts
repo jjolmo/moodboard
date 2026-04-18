@@ -901,25 +901,29 @@ async function syncWatchedFolder(folderPath: string): Promise<number> {
 		return 0;
 	}
 
-	// Find new files not already tracked
+	const currentPathSet = new Set(imageFiles);
 	const knownPaths = new Set(Object.keys(folder.knownFiles));
 	const newFiles = imageFiles.filter(f => !knownPaths.has(f));
-	if (newFiles.length === 0) {
-		// Update lastSyncedAt
-		projects = projects.map(p =>
-			p.id === activeProjectId ? { ...p, watchedFolders: (p.watchedFolders ?? []).map(f =>
-				f.path === folderPath ? { ...f, lastSyncedAt: now() } : f
-			), updatedAt: now() } : p
-		);
-		triggerSave();
-		return 0;
-	}
+	const removedPaths = Array.from(knownPaths).filter(p => !currentPathSet.has(p));
 
-	// Copy each new file and add to the vibe
 	const vibe = activeProject.vibes.find(v => v.id === folder.vibeId);
 	if (!vibe) return 0;
 
-	const existingElements = vibe.elements;
+	// ── Removal pass: elements whose source file disappeared ─────────
+	const removedElementIds = new Set<string>();
+	const orphanedFilenames: string[] = [];
+	for (const removedPath of removedPaths) {
+		const elId = folder.knownFiles[removedPath];
+		if (!elId) continue;
+		removedElementIds.add(elId);
+		const el = vibe.elements.find(e => e.id === elId);
+		if (el && el.type === 'image') {
+			orphanedFilenames.push((el.data as MoodImageData).filename);
+		}
+	}
+
+	// ── Additions pass ─────────────────────────────────────────────
+	const existingElements = vibe.elements.filter(e => !removedElementIds.has(e.id));
 	const maxZ = existingElements.length > 0 ? Math.max(...existingElements.map(e => e.zIndex)) : 0;
 	const gap = 30;
 	const cellSize = 300;
@@ -928,6 +932,7 @@ async function syncWatchedFolder(folderPath: string): Promise<number> {
 	let idx = existingElements.length;
 
 	const newKnownFiles: Record<string, string> = { ...folder.knownFiles };
+	for (const p of removedPaths) delete newKnownFiles[p];
 	const newElements: CanvasElement[] = [];
 
 	for (const filePath of newFiles) {
@@ -956,12 +961,35 @@ async function syncWatchedFolder(folderPath: string): Promise<number> {
 		}
 	}
 
-	if (newElements.length > 0) {
+	const hasChanges = newElements.length > 0 || removedElementIds.size > 0 || removedPaths.length > 0;
+	if (hasChanges) {
 		projects = projects.map(p =>
 			p.id === activeProjectId ? { ...p, vibes: p.vibes.map(v =>
-				v.id === folder.vibeId ? { ...v, elements: [...v.elements, ...newElements], updatedAt: now() } : v
+				v.id === folder.vibeId
+					? { ...v, elements: [...v.elements.filter(e => !removedElementIds.has(e.id)), ...newElements], updatedAt: now() }
+					: v
 			), watchedFolders: (p.watchedFolders ?? []).map(f =>
 				f.path === folderPath ? { ...f, knownFiles: newKnownFiles, lastSyncedAt: now() } : f
+			), updatedAt: now() } : p
+		);
+		// Drop cached copies of removed images if no other element still references them
+		for (const filename of orphanedFilenames) {
+			if (countFilenameUsages(filename) === 0) {
+				invoke('delete_image', { projectId: activeProjectId, filename }).catch(console.error);
+			}
+		}
+		// Clean up selection
+		if (removedElementIds.size > 0) {
+			const next = new Set(selectedElementIds);
+			for (const id of removedElementIds) next.delete(id);
+			selectedElementIds = next;
+		}
+		triggerSave();
+	} else {
+		// Still update lastSyncedAt
+		projects = projects.map(p =>
+			p.id === activeProjectId ? { ...p, watchedFolders: (p.watchedFolders ?? []).map(f =>
+				f.path === folderPath ? { ...f, lastSyncedAt: now() } : f
 			), updatedAt: now() } : p
 		);
 		triggerSave();
