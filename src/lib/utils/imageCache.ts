@@ -1,20 +1,26 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 
-const cache = new Map<string, string>();
+// filename -> asset-protocol URL (served directly by the webview, zero base64)
+const urlCache = new Map<string, string>();
+const pendingUrl = new Map<string, Promise<string>>();
+
+// Static GIF frames remain as data URLs (generated from a canvas snapshot)
 const staticFrameCache = new Map<string, string>();
-const pending = new Map<string, Promise<string>>();
 
-export async function getCachedImage(projectId: string, filename: string): Promise<string> {
+export async function getImageUrl(projectId: string, filename: string): Promise<string> {
 	const key = `${projectId}/${filename}`;
-	if (cache.has(key)) return cache.get(key)!;
-	if (pending.has(key)) return pending.get(key)!;
+	const cached = urlCache.get(key);
+	if (cached) return cached;
+	const inflight = pendingUrl.get(key);
+	if (inflight) return inflight;
 
-	const promise = invoke<string>('get_image_base64', { projectId, filename }).then((src) => {
-		cache.set(key, src);
-		pending.delete(key);
+	const promise = invoke<string>('get_image_path', { projectId, filename }).then((path) => {
+		const src = convertFileSrc(path);
+		urlCache.set(key, src);
+		pendingUrl.delete(key);
 		return src;
 	});
-	pending.set(key, promise);
+	pendingUrl.set(key, promise);
 	return promise;
 }
 
@@ -27,5 +33,5 @@ export function cacheStaticFrame(src: string, staticSrc: string): void {
 }
 
 export function invalidateImage(projectId: string, filename: string): void {
-	cache.delete(`${projectId}/${filename}`);
+	urlCache.delete(`${projectId}/${filename}`);
 }

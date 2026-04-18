@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { appStore } from '$lib/stores/app.svelte';
-	import { invoke } from '@tauri-apps/api/core';
+	import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 	import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 	import { generateId, now } from '$lib/utils/ids';
 	import { debounce } from '$lib/utils/debounce';
@@ -16,7 +16,8 @@
 
 	async function getImageSize(projectId: string, filename: string): Promise<{w: number; h: number}> {
 		try {
-			const src: string = await invoke('get_image_base64', { projectId, filename });
+			const path: string = await invoke('get_image_path', { projectId, filename });
+			const src = convertFileSrc(path);
 			return new Promise((resolve) => {
 				const img = new Image();
 				img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
@@ -51,6 +52,29 @@
 	const debouncedSaveViewport = debounce(() => {
 		appStore.saveViewport(panX, panY, zoom);
 	}, 300);
+
+	// Viewport culling: only render elements visible on screen (with margin)
+	let viewportWidth = $state(1920);
+	let viewportHeight = $state(1080);
+	const CULL_MARGIN = 200; // px extra margin to avoid pop-in
+
+	const visibleElements = $derived.by(() => {
+		if (!viewport) return appStore.elements;
+		const vw = viewportWidth;
+		const vh = viewportHeight;
+		const z = zoom;
+		const px = panX;
+		const py = panY;
+		// Viewport bounds in canvas coordinates
+		const left = -px / z - CULL_MARGIN / z;
+		const top = -py / z - CULL_MARGIN / z;
+		const right = (vw - px) / z + CULL_MARGIN / z;
+		const bottom = (vh - py) / z + CULL_MARGIN / z;
+		return appStore.elements.filter(el => {
+			const ex = el.x, ey = el.y, ew = el.width, eh = el.height;
+			return ex + ew > left && ex < right && ey + eh > top && ey < bottom;
+		});
+	});
 
 	// Restore viewport when vibe or tag view changes
 	let lastTagViewId = $state<string | null>(null);
@@ -164,10 +188,19 @@
 		}
 	}
 
+	let panRaf = 0;
+	let panPendingX = 0;
+	let panPendingY = 0;
 	function handlePanMove(e: MouseEvent) {
 		if (!panning) return;
-		panX = panStart.panX + (e.clientX - panStart.x);
-		panY = panStart.panY + (e.clientY - panStart.y);
+		panPendingX = panStart.panX + (e.clientX - panStart.x);
+		panPendingY = panStart.panY + (e.clientY - panStart.y);
+		if (panRaf) return;
+		panRaf = requestAnimationFrame(() => {
+			panRaf = 0;
+			panX = panPendingX;
+			panY = panPendingY;
+		});
 	}
 
 	function handlePanEnd() {
@@ -222,7 +255,22 @@
 
 	let unlistenDragDrop: (() => void) | null = null;
 
+	let resizeObserver: ResizeObserver | null = null;
+
 	onMount(async () => {
+		// Track viewport dimensions for culling
+		if (viewport) {
+			viewportWidth = viewport.clientWidth;
+			viewportHeight = viewport.clientHeight;
+			resizeObserver = new ResizeObserver(entries => {
+				for (const entry of entries) {
+					viewportWidth = entry.contentRect.width;
+					viewportHeight = entry.contentRect.height;
+				}
+			});
+			resizeObserver.observe(viewport);
+		}
+
 		// Capture-phase listeners — intercept before any child can stopPropagation
 		viewport?.addEventListener('mousedown', (e: MouseEvent) => {
 			// Middle mouse = pan from anywhere
@@ -315,6 +363,7 @@
 	onDestroy(() => {
 		if (unlistenDragDrop) unlistenDragDrop();
 		if (zoomTooltipTimeout) clearTimeout(zoomTooltipTimeout);
+		if (resizeObserver) resizeObserver.disconnect();
 	});
 
 	// ── Clipboard paste (Ctrl+V) ────────────────────────────
@@ -702,12 +751,12 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="absolute"
-		style="transform: translate({panX}px, {panY}px) scale({zoom}); transform-origin: 0 0; width: {CANVAS_SIZE}px; height: {CANVAS_SIZE}px; background-image: radial-gradient(circle, var(--color-canvas-grid) 1px, transparent 1px); background-size: 30px 30px; box-shadow: inset 0 0 0 2px var(--ui-border);"
+		style="transform: {appStore.gpuLayer ? `translate3d(${panX}px, ${panY}px, 0)` : `translate(${panX}px, ${panY}px)`} scale({zoom}); transform-origin: 0 0; width: {CANVAS_SIZE}px; height: {CANVAS_SIZE}px; background-image: radial-gradient(circle, var(--color-canvas-grid) 1px, transparent 1px); background-size: 30px 30px; box-shadow: inset 0 0 0 2px var(--ui-border); will-change: {appStore.gpuLayer ? 'transform' : 'auto'};"
 		data-canvas="true"
 		onclick={handleCanvasClick}
 	>
 		<!-- Render elements -->
-		{#each appStore.elements as element (element.id)}
+		{#each visibleElements as element (element.id)}
 			{#if element.type === 'image'}
 				<ImageElement {element} scrollContainer={viewport} {zoom} />
 			{:else if element.type === 'arrow'}

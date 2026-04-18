@@ -7,6 +7,7 @@ export interface AppState {
 	roundedCorners?: boolean;
 	sidebarCollapsed?: boolean;
 	zoomSensitivity?: number;
+	gpuLayer?: boolean;
 }
 
 export interface TagElementLayout {

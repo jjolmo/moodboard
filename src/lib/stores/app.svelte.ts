@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import type { AppState, Project, Vibe, CanvasElement, Tool, Theme, Tag, MoodImageData, TagElementLayout, WatchedFolder } from '$lib/types';
 import { generateId, now } from '$lib/utils/ids';
 import { debounce } from '$lib/utils/debounce';
@@ -30,6 +31,7 @@ let focusMode = $state(false);
 let lightboxElementId = $state<string | null>(null);
 let roundedCorners = $state(true);
 let zoomSensitivity = $state(5); // 1-10, maps to zoom factor
+let gpuLayer = $state(true);
 let imageContextMenu = $state<{ x: number; y: number; elementId: string } | null>(null);
 let clipboard = $state<{ elements: CanvasElement[]; isCut: boolean }>({ elements: [], isCut: false });
 let activeTagId = $state<string | null>(null);
@@ -45,6 +47,8 @@ let tagViewElements = $state<CanvasElement[]>([]);
 const elements = $derived(tagGridViewId ? tagViewElements : (activeVibe?.elements ?? []));
 const selectedElements = $derived(elements.filter((e) => selectedElementIds.has(e.id)));
 const tags = $derived(activeProject?.tags ?? []);
+// Pre-computed tag map for O(1) lookups instead of O(n) .find() per image
+const tagMap = $derived(new Map(tags.map(t => [t.id, t])));
 
 // ── Persistence ─────────────────────────────────────────────
 
@@ -62,6 +66,7 @@ async function loadAppState(): Promise<void> {
 		if (state.roundedCorners !== undefined) roundedCorners = state.roundedCorners;
 		if (state.sidebarCollapsed !== undefined) sidebarCollapsed = state.sidebarCollapsed;
 		if (state.zoomSensitivity !== undefined) zoomSensitivity = state.zoomSensitivity;
+		if (state.gpuLayer !== undefined) gpuLayer = state.gpuLayer;
 
 		if (state.lastProjectId && projects.some((p) => p.id === state.lastProjectId)) {
 			activeProjectId = state.lastProjectId;
@@ -84,8 +89,10 @@ async function loadAppState(): Promise<void> {
 
 		initialized = true;
 
-		// Auto-sync watched folders on startup
+		// Auto-sync watched folders on startup, start fs watchers, and listen for changes
 		syncAllWatchedFolders().catch(console.error);
+		startAllFolderWatchers().catch(console.error);
+		setupFolderChangeListener().catch(console.error);
 	} catch (e) {
 		console.error('Failed to load app state:', e);
 		setTheme('light');
@@ -102,7 +109,7 @@ const debouncedSave = debounce(async () => {
 		await invoke('save_app_state', {
 			state: {
 				lastProjectId: activeProjectId, theme,
-				snapEnabled, snapDistance, animateGifs, roundedCorners, sidebarCollapsed, zoomSensitivity
+				snapEnabled, snapDistance, animateGifs, roundedCorners, sidebarCollapsed, zoomSensitivity, gpuLayer
 			} as AppState
 		});
 	} catch (e) {
@@ -457,6 +464,7 @@ function toggleSnap(): void { snapEnabled = !snapEnabled; }
 function setSnapDistance(d: number): void { snapDistance = Math.max(1, Math.min(50, d)); }
 function toggleFocusMode(): void { focusMode = !focusMode; }
 function toggleRoundedCorners(): void { roundedCorners = !roundedCorners; }
+function toggleGpuLayer(): void { gpuLayer = !gpuLayer; }
 function openLightbox(elementId: string): void { lightboxElementId = elementId; }
 function closeLightbox(): void { lightboxElementId = null; }
 function openImageContextMenu(x: number, y: number, elementId: string): void { imageContextMenu = { x, y, elementId }; }
@@ -858,8 +866,13 @@ async function addWatchedFolder(): Promise<void> {
 	);
 	triggerSave();
 
-	// Immediately sync
+	// Immediately sync and start the fs watcher
 	await syncWatchedFolder(folderPath);
+	try {
+		await invoke('start_folder_watch', { path: folderPath });
+	} catch (e) {
+		console.error('Failed to start folder watcher:', e);
+	}
 }
 
 async function removeWatchedFolder(folderPath: string): Promise<void> {
@@ -868,6 +881,11 @@ async function removeWatchedFolder(folderPath: string): Promise<void> {
 		p.id === activeProjectId ? { ...p, watchedFolders: (p.watchedFolders ?? []).filter(f => f.path !== folderPath), updatedAt: now() } : p
 	);
 	triggerSave();
+	try {
+		await invoke('stop_folder_watch', { path: folderPath });
+	} catch (e) {
+		console.error('Failed to stop folder watcher:', e);
+	}
 }
 
 async function syncWatchedFolder(folderPath: string): Promise<number> {
@@ -959,6 +977,36 @@ async function syncAllWatchedFolders(): Promise<void> {
 	}
 }
 
+async function startAllFolderWatchers(): Promise<void> {
+	if (!activeProject) return;
+	for (const folder of (activeProject.watchedFolders ?? [])) {
+		try {
+			await invoke('start_folder_watch', { path: folder.path });
+		} catch (e) {
+			console.error('Failed to start folder watcher:', folder.path, e);
+		}
+	}
+}
+
+// Debounce fs events per-path (notify fires many events per file write)
+const folderSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
+let folderListenerReady = false;
+async function setupFolderChangeListener(): Promise<void> {
+	if (folderListenerReady) return;
+	folderListenerReady = true;
+	await listen<string>('folder-changed', (event) => {
+		const path = event.payload;
+		// Only sync if this folder belongs to the active project
+		if (!(activeProject?.watchedFolders ?? []).some(f => f.path === path)) return;
+		const prev = folderSyncTimers.get(path);
+		if (prev) clearTimeout(prev);
+		folderSyncTimers.set(path, setTimeout(() => {
+			folderSyncTimers.delete(path);
+			syncWatchedFolder(path).catch(console.error);
+		}, 500));
+	});
+}
+
 // ── Export store ─────────────────────────────────────────────
 
 export const appStore = {
@@ -983,9 +1031,11 @@ export const appStore = {
 	get lightboxElementId() { return lightboxElementId; },
 	get lightboxElement() { return lightboxElementId ? elements.find(e => e.id === lightboxElementId) ?? null : null; },
 	get roundedCorners() { return roundedCorners; },
+	get gpuLayer() { return gpuLayer; },
 	get imageContextMenu() { return imageContextMenu; },
 	get initialized() { return initialized; },
 	get tags() { return tags; },
+	get tagMap() { return tagMap; },
 	get activeTagId() { return activeTagId; },
 	get tagGridViewId() { return tagGridViewId; },
 
@@ -996,7 +1046,7 @@ export const appStore = {
 	bringToFront, selectElement, isSelected, arrangeInGrid, copyElements, cutElements, pasteElements,
 	setTool, setShapeColor, toggleSidebar, toggleAnimateGifs,
 	toggleSnap, setSnapDistance, setZoomSensitivity, snapPosition,
-	toggleFocusMode, toggleRoundedCorners, openLightbox, closeLightbox, toggleAlwaysOnTop, openImageContextMenu, closeImageContextMenu,
+	toggleFocusMode, toggleRoundedCorners, toggleGpuLayer, openLightbox, closeLightbox, toggleAlwaysOnTop, openImageContextMenu, closeImageContextMenu,
 	saveViewport, getViewport,
 	pushUndo, undo,
 	setTheme, toggleSettings, exportMoo, importMoo,

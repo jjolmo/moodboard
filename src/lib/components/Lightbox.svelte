@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { appStore } from '$lib/stores/app.svelte';
 	import type { MoodImageData } from '$lib/types';
-	import { invoke } from '@tauri-apps/api/core';
+	import { getImageUrl } from '$lib/utils/imageCache';
 
 	let imageSrc = $state('');
 	let zoom = $state(1);
@@ -15,8 +15,8 @@
 
 	$effect(() => {
 		if (data?.filename && appStore.activeProjectId) {
-			invoke('get_image_base64', { projectId: appStore.activeProjectId, filename: data.filename })
-				.then((src: unknown) => { imageSrc = src as string; zoom = 1; panX = 0; panY = 0; })
+			getImageUrl(appStore.activeProjectId, data.filename)
+				.then((src) => { imageSrc = src; zoom = 1; panX = 0; panY = 0; })
 				.catch(console.error);
 		}
 	});
@@ -65,8 +65,8 @@
 		<div class="lightbox-zoom">{Math.round(zoom * 100)}%</div>
 
 		{#if imageSrc}
-			<img src={imageSrc} alt="" draggable="false"
-				style="transform:translate({panX}px,{panY}px) scale({zoom}); transform-origin:center center; max-width:none; pointer-events:none; user-select:none; image-rendering:pixelated;" />
+			<img src={imageSrc} alt="" draggable="false" decoding="async"
+				style="transform:translate({panX}px,{panY}px) scale({zoom}); transform-origin:center center; max-width:none; pointer-events:none; user-select:none;" />
 		{/if}
 	</div>
 {/if}
