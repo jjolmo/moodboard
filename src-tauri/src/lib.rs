@@ -344,6 +344,104 @@ fn get_image_path(app: tauri::AppHandle, project_id: String, filename: String) -
         .to_string()
 }
 
+/// Returns the path to a cached thumbnail of the given image at a bucket size.
+/// Valid buckets: 256, 1024. The thumbnail is a WebP file stored in the app cache
+/// directory. Generated lazily on first request and reused afterwards.
+/// If the original image is smaller than the bucket, returns the original path.
+#[tauri::command]
+fn get_image_thumbnail_path(
+    app: tauri::AppHandle,
+    project_id: String,
+    filename: String,
+    bucket: u32,
+) -> Result<String, String> {
+    let bucket = if bucket <= 256 { 256u32 } else { 1024u32 };
+    let original = projects_dir(&app)
+        .join(&project_id)
+        .join("images")
+        .join(&filename);
+    if !original.exists() {
+        return Err("Image not found".into());
+    }
+
+    // SVG and GIF: never downscale — return original (GIFs need to animate, SVGs are vector)
+    let ext = original
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    if ext == "svg" || ext == "gif" {
+        return Ok(original.to_string_lossy().to_string());
+    }
+
+    // Cache dir: $APP_CACHE/thumbs/{project_id}/{filename}_{bucket}.webp
+    let cache_root = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join("thumbs")
+        .join(&project_id);
+    if !cache_root.exists() {
+        fs::create_dir_all(&cache_root).map_err(|e| e.to_string())?;
+    }
+    let thumb_name = format!("{}_{}.webp", filename, bucket);
+    let thumb_path = cache_root.join(&thumb_name);
+
+    // Reuse cached thumb if newer than source
+    if thumb_path.exists() {
+        let (Ok(tm), Ok(sm)) = (fs::metadata(&thumb_path), fs::metadata(&original)) else {
+            return Ok(thumb_path.to_string_lossy().to_string());
+        };
+        if let (Ok(t), Ok(s)) = (tm.modified(), sm.modified()) {
+            if t >= s {
+                return Ok(thumb_path.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    // Decode source
+    let img = image::open(&original).map_err(|e| format!("decode: {}", e))?;
+    let (w, h) = (img.width(), img.height());
+    // If already smaller than bucket, return original (avoid upscaling waste)
+    if w.max(h) <= bucket {
+        return Ok(original.to_string_lossy().to_string());
+    }
+
+    // Compute target keeping aspect
+    let (tw, th) = if w >= h {
+        let th = ((h as f32) * (bucket as f32) / (w as f32)).round().max(1.0) as u32;
+        (bucket, th)
+    } else {
+        let tw = ((w as f32) * (bucket as f32) / (h as f32)).round().max(1.0) as u32;
+        (tw, bucket)
+    };
+
+    // Resize with fast_image_resize (SIMD)
+    let rgba = img.to_rgba8();
+    let src = fast_image_resize::images::Image::from_vec_u8(
+        w,
+        h,
+        rgba.into_raw(),
+        fast_image_resize::PixelType::U8x4,
+    )
+    .map_err(|e| format!("fir src: {}", e))?;
+    let mut dst = fast_image_resize::images::Image::new(tw, th, fast_image_resize::PixelType::U8x4);
+    let mut resizer = fast_image_resize::Resizer::new();
+    resizer
+        .resize(&src, &mut dst, None)
+        .map_err(|e| format!("fir resize: {}", e))?;
+
+    // Encode as WebP via image crate
+    let buf = image::RgbaImage::from_raw(tw, th, dst.into_vec())
+        .ok_or_else(|| "rgba buffer size mismatch".to_string())?;
+    let dyn_img = image::DynamicImage::ImageRgba8(buf);
+    dyn_img
+        .save_with_format(&thumb_path, image::ImageFormat::WebP)
+        .map_err(|e| format!("encode webp: {}", e))?;
+
+    Ok(thumb_path.to_string_lossy().to_string())
+}
+
 // ── Folder scanning ─────────────────────────────────────────
 
 #[tauri::command]
@@ -626,6 +724,7 @@ pub fn run() {
             delete_image,
             download_image_url,
             get_image_path,
+            get_image_thumbnail_path,
             export_moo,
             import_moo,
             updater::check_for_updates,

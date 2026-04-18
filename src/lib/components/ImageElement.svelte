@@ -2,7 +2,7 @@
 	import { appStore } from '$lib/stores/app.svelte';
 	import type { CanvasElement, MoodImageData } from '$lib/types';
 	import { invoke } from '@tauri-apps/api/core';
-	import { getImageUrl, getCachedStaticFrame, cacheStaticFrame } from '$lib/utils/imageCache';
+	import { getImageUrl, getCachedStaticFrame, cacheStaticFrame, pickBucket, type LodBucket } from '$lib/utils/imageCache';
 
 	let { element, scrollContainer, zoom = 1 }: { element: CanvasElement; scrollContainer: HTMLElement | null; zoom?: number } = $props();
 
@@ -40,35 +40,74 @@
 	const renderH = $derived(localH ?? element.height);
 	const renderRot = $derived(localRot ?? rotation);
 
-	// Only reload when filename changes — not on position/size/selection updates
+	// LOD: pick thumbnail bucket based on how big this image renders on screen.
+	// Throttled so zoom doesn't spam invocations mid-gesture.
+	let currentBucket = $state<LodBucket | null>(null);
+	let bucketSwapScheduled = 0;
+
+	function desiredBucket(): LodBucket {
+		const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+		const displayPx = Math.max(element.width, element.height) * zoom * dpr;
+		return pickBucket(displayPx, currentBucket);
+	}
+
+	function loadBucket(bucket: LodBucket) {
+		const fn = data.filename;
+		const pid = appStore.activeProjectId;
+		if (!fn || !pid) return;
+		getImageUrl(pid, fn, bucket).then((src) => {
+			// Only apply if still the active filename / bucket
+			if (data.filename !== fn) return;
+			imageSrc = src;
+			currentBucket = bucket;
+			if (fn.toLowerCase().endsWith('.gif') && !staticSrc) {
+				const cached = getCachedStaticFrame(src);
+				if (cached) { staticSrc = cached; return; }
+				const img = new Image();
+				img.crossOrigin = 'anonymous';
+				img.onload = () => {
+					try {
+						const c = document.createElement('canvas');
+						c.width = img.naturalWidth; c.height = img.naturalHeight;
+						c.getContext('2d')?.drawImage(img, 0, 0);
+						const frame = c.toDataURL('image/png');
+						cacheStaticFrame(src, frame);
+						staticSrc = frame;
+					} catch (e) {
+						console.warn('[gif] static frame extraction failed:', e);
+					}
+				};
+				img.onerror = (e) => console.warn('[gif] static frame load failed:', e);
+				img.src = src;
+			}
+		}).catch(console.error);
+	}
+
 	$effect(() => {
 		const fn = data.filename;
 		const pid = appStore.activeProjectId;
-		if (fn && pid && fn !== loadedFilename) {
+		if (!fn || !pid) return;
+
+		// First load: pick bucket immediately, reset state if filename changed
+		if (fn !== loadedFilename) {
 			loadedFilename = fn;
-			getImageUrl(pid, fn).then((src) => {
-				imageSrc = src;
-				if (fn.toLowerCase().endsWith('.gif')) {
-					const cached = getCachedStaticFrame(src);
-					if (cached) { staticSrc = cached; return; }
-					const img = new Image();
-					img.crossOrigin = 'anonymous';
-					img.onload = () => {
-						try {
-							const c = document.createElement('canvas');
-							c.width = img.naturalWidth; c.height = img.naturalHeight;
-							c.getContext('2d')?.drawImage(img, 0, 0);
-							const frame = c.toDataURL('image/png');
-							cacheStaticFrame(src, frame);
-							staticSrc = frame;
-						} catch (e) {
-							console.warn('[gif] static frame extraction failed:', e);
-						}
-					};
-					img.onerror = (e) => console.warn('[gif] static frame load failed:', e);
-					img.src = src;
-				}
-			}).catch(console.error);
+			imageSrc = '';
+			staticSrc = '';
+			currentBucket = null;
+			loadBucket(desiredBucket());
+			return;
+		}
+
+		// Subsequent: zoom changed. Recompute, and if bucket changed, schedule swap.
+		const want = desiredBucket();
+		if (want !== currentBucket) {
+			if (bucketSwapScheduled) clearTimeout(bucketSwapScheduled);
+			bucketSwapScheduled = window.setTimeout(() => {
+				bucketSwapScheduled = 0;
+				// Re-check in case zoom kept changing
+				const again = desiredBucket();
+				if (again !== currentBucket) loadBucket(again);
+			}, 180);
 		}
 	});
 
