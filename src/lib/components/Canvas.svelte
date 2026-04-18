@@ -56,15 +56,32 @@
 	// Viewport culling: only render elements visible on screen (with margin)
 	let viewportWidth = $state(1920);
 	let viewportHeight = $state(1080);
-	const CULL_MARGIN = 200; // px extra margin to avoid pop-in
+	const CULL_MARGIN = 800; // bigger margin → fewer DOM mount/unmount churns during pan
+
+	// Separate "cull viewport" state: updated on idle (throttled), frozen during active pan.
+	// This avoids re-filtering + DOM diffing on every pan frame, which invalidates the composited layer.
+	let cullPanX = $state(0);
+	let cullPanY = $state(0);
+	let cullZoom = $state(1);
+	let cullScheduled = 0;
+
+	function scheduleCullUpdate() {
+		if (cullScheduled) return;
+		cullScheduled = window.setTimeout(() => {
+			cullScheduled = 0;
+			cullPanX = panX;
+			cullPanY = panY;
+			cullZoom = zoom;
+		}, 120);
+	}
 
 	const visibleElements = $derived.by(() => {
 		if (!viewport) return appStore.elements;
 		const vw = viewportWidth;
 		const vh = viewportHeight;
-		const z = zoom;
-		const px = panX;
-		const py = panY;
+		const z = cullZoom;
+		const px = cullPanX;
+		const py = cullPanY;
 		// Viewport bounds in canvas coordinates
 		const left = -px / z - CULL_MARGIN / z;
 		const top = -py / z - CULL_MARGIN / z;
@@ -89,6 +106,9 @@
 			panX = vp.panX;
 			panY = vp.panY;
 			zoom = vp.zoom;
+			cullPanX = panX;
+			cullPanY = panY;
+			cullZoom = zoom;
 		}
 	});
 	let zoomTooltipTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -116,6 +136,7 @@
 		panX = mx - canvasX * newZoom;
 		panY = my - canvasY * newZoom;
 		zoom = newZoom;
+		scheduleCullUpdate();
 
 		showZoomTooltip = true;
 		if (zoomTooltipTimeout) clearTimeout(zoomTooltipTimeout);
@@ -200,6 +221,7 @@
 			panRaf = 0;
 			panX = panPendingX;
 			panY = panPendingY;
+			scheduleCullUpdate();
 		});
 	}
 
@@ -207,6 +229,8 @@
 		panning = false;
 		window.removeEventListener('mousemove', handlePanMove);
 		window.removeEventListener('mouseup', handlePanEnd);
+		if (cullScheduled) { clearTimeout(cullScheduled); cullScheduled = 0; }
+		cullPanX = panX; cullPanY = panY; cullZoom = zoom;
 		debouncedSaveViewport();
 	}
 
@@ -737,7 +761,7 @@
 	onmousedown={handleViewportMouseDown}
 	onwheel={handleWheel}
 	role="application"
-	style="cursor: {cursorStyle}; background-color: var(--color-canvas-bg);"
+	style="cursor: {cursorStyle}; background-color: var(--color-canvas-bg); background-image: radial-gradient(circle, var(--color-canvas-grid) 1px, transparent 1px); background-size: {30 * zoom}px {30 * zoom}px; background-position: {panX}px {panY}px;"
 >
 	<!-- Zoom tooltip -->
 	{#if showZoomTooltip}
@@ -751,7 +775,7 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="absolute"
-		style="transform: {appStore.gpuLayer ? `translate3d(${panX}px, ${panY}px, 0)` : `translate(${panX}px, ${panY}px)`} scale({zoom}); transform-origin: 0 0; width: {CANVAS_SIZE}px; height: {CANVAS_SIZE}px; background-image: radial-gradient(circle, var(--color-canvas-grid) 1px, transparent 1px); background-size: 30px 30px; box-shadow: inset 0 0 0 2px var(--ui-border); will-change: {appStore.gpuLayer ? 'transform' : 'auto'};"
+		style="transform: {appStore.gpuLayer ? `translate3d(${panX}px, ${panY}px, 0)` : `translate(${panX}px, ${panY}px)`} scale({zoom}); transform-origin: 0 0; width: {CANVAS_SIZE}px; height: {CANVAS_SIZE}px; will-change: {appStore.gpuLayer ? 'transform' : 'auto'};"
 		data-canvas="true"
 		onclick={handleCanvasClick}
 	>

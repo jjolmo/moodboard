@@ -262,7 +262,7 @@
 	bind:this={wrapperEl}
 	class="absolute select-none"
 	data-element-id={element.id}
-	style="left:{renderX}px; top:{renderY}px; width:{renderW}px; height:{renderH}px; z-index:{element.zIndex}; transform:rotate({renderRot}deg); transform-origin:center center; will-change:{dragging || resizing ? 'transform' : 'auto'}; content-visibility:auto; contain-intrinsic-size:{element.width}px {element.height}px;"
+	style="left:{renderX}px; top:{renderY}px; width:{renderW}px; height:{renderH}px; z-index:{element.zIndex}; transform:rotate({renderRot}deg); transform-origin:center center; will-change:{dragging || resizing ? 'transform' : 'auto'}; contain:layout paint;"
 	onmousedown={handleMouseDown}
 	ondblclick={handleDblClick}
 	oncontextmenu={handleContextMenuEvt}
