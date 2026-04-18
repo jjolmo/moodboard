@@ -4172,7 +4172,7 @@ dependencies = [
 
 [[package]]
 name = "simple-moodboard"
-version = "0.9.11"
+version = "0.9.12"
 dependencies = [
  "base64 0.22.1",
  "dirs",
