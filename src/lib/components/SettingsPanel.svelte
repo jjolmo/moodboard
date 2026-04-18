@@ -84,6 +84,13 @@
 						<span style="position:absolute;top:2px;{appStore.roundedCorners ? 'right:2px' : 'left:2px'};width:16px;height:16px;border-radius:50%;background:white;transition:all 0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.2);"></span>
 					</button>
 				</div>
+				<div style="display:flex;align-items:center;justify-content:space-between" title="Forces a GPU compositor layer for smoother pan/zoom. Disable if the canvas looks blurry or causes artifacts.">
+					<span style="font-size:13px;color:var(--text-secondary)">GPU acceleration</span>
+					<button onclick={() => appStore.toggleGpuLayer()}
+						style="width:36px;height:20px;border-radius:10px;border:none;cursor:pointer;position:relative;background:{appStore.gpuLayer ? 'var(--ui-accent)' : 'var(--bg-tertiary)'};transition:background 0.2s;">
+						<span style="position:absolute;top:2px;{appStore.gpuLayer ? 'right:2px' : 'left:2px'};width:16px;height:16px;border-radius:50%;background:white;transition:all 0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.2);"></span>
+					</button>
+				</div>
 			</div>
 		</div>
 

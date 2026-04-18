@@ -2,7 +2,7 @@
 	import { appStore } from '$lib/stores/app.svelte';
 	import type { CanvasElement, MoodImageData } from '$lib/types';
 	import { invoke } from '@tauri-apps/api/core';
-	import { getCachedImage, getCachedStaticFrame, cacheStaticFrame } from '$lib/utils/imageCache';
+	import { getImageUrl, getCachedStaticFrame, cacheStaticFrame } from '$lib/utils/imageCache';
 
 	let { element, scrollContainer, zoom = 1 }: { element: CanvasElement; scrollContainer: HTMLElement | null; zoom?: number } = $props();
 
@@ -17,11 +17,28 @@
 	let rotateStart = $state({ angle: 0, mouseAngle: 0 });
 	let wrapperEl = $state<HTMLDivElement | null>(null);
 
+	// Local overrides during drag/resize/rotate — avoids store updates per frame
+	let localX = $state<number | null>(null);
+	let localY = $state<number | null>(null);
+	let localW = $state<number | null>(null);
+	let localH = $state<number | null>(null);
+	let localRot = $state<number | null>(null);
+
+	// Peer local overrides during group drag
+	let peerOverrides = $state<Map<string, { x: number; y: number }>>(new Map());
+
 	const isSelected = $derived(appStore.isSelected(element.id));
 	const data = $derived(element.data as MoodImageData);
 	const isGif = $derived(data.filename?.toLowerCase().endsWith('.gif') ?? false);
 	const displaySrc = $derived(isGif && !appStore.animateGifs && staticSrc ? staticSrc : imageSrc);
 	const rotation = $derived(element.rotation ?? 0);
+
+	// Render positions: use local override if dragging, else store value
+	const renderX = $derived(localX ?? element.x);
+	const renderY = $derived(localY ?? element.y);
+	const renderW = $derived(localW ?? element.width);
+	const renderH = $derived(localH ?? element.height);
+	const renderRot = $derived(localRot ?? rotation);
 
 	// Only reload when filename changes — not on position/size/selection updates
 	$effect(() => {
@@ -29,20 +46,26 @@
 		const pid = appStore.activeProjectId;
 		if (fn && pid && fn !== loadedFilename) {
 			loadedFilename = fn;
-			getCachedImage(pid, fn).then((src) => {
+			getImageUrl(pid, fn).then((src) => {
 				imageSrc = src;
 				if (fn.toLowerCase().endsWith('.gif')) {
 					const cached = getCachedStaticFrame(src);
 					if (cached) { staticSrc = cached; return; }
 					const img = new Image();
+					img.crossOrigin = 'anonymous';
 					img.onload = () => {
-						const c = document.createElement('canvas');
-						c.width = img.naturalWidth; c.height = img.naturalHeight;
-						c.getContext('2d')?.drawImage(img, 0, 0);
-						const frame = c.toDataURL('image/png');
-						cacheStaticFrame(src, frame);
-						staticSrc = frame;
+						try {
+							const c = document.createElement('canvas');
+							c.width = img.naturalWidth; c.height = img.naturalHeight;
+							c.getContext('2d')?.drawImage(img, 0, 0);
+							const frame = c.toDataURL('image/png');
+							cacheStaticFrame(src, frame);
+							staticSrc = frame;
+						} catch (e) {
+							console.warn('[gif] static frame extraction failed:', e);
+						}
 					};
+					img.onerror = (e) => console.warn('[gif] static frame load failed:', e);
 					img.src = src;
 				}
 			}).catch(console.error);
@@ -94,15 +117,36 @@
 				const snapped = appStore.snapPosition(element.id, nx, ny, element.width, element.height);
 				nx = snapped.x; ny = snapped.y;
 			}
-			appStore.updateElement(element.id, { x: nx, y: ny });
-			// Move all other selected elements by the same delta
+			// Update local position only — no store update per frame
+			localX = nx;
+			localY = ny;
+			// Broadcast peer positions via DOM for group drag (no store)
 			for (const peer of dragPeers) {
-				appStore.updateElement(peer.id, { x: peer.startX + dx, y: peer.startY + dy });
+				const peerEl = document.querySelector(`[data-element-id="${peer.id}"]`) as HTMLElement | null;
+				if (peerEl) {
+					const px = peer.startX + dx;
+					const py = peer.startY + dy;
+					peerEl.style.left = px + 'px';
+					peerEl.style.top = py + 'px';
+					peerOverrides.set(peer.id, { x: px, y: py });
+				}
 			}
 		});
 	}
 
 	function handleDragEnd() {
+		if (dragging) {
+			// Commit final positions to store in one batch
+			if (localX !== null || localY !== null) {
+				appStore.updateElement(element.id, { x: localX ?? element.x, y: localY ?? element.y });
+				localX = null; localY = null;
+			}
+			for (const peer of dragPeers) {
+				const pos = peerOverrides.get(peer.id);
+				if (pos) appStore.updateElement(peer.id, { x: pos.x, y: pos.y });
+			}
+			peerOverrides.clear();
+		}
 		dragging = false;
 		dragPeers = [];
 		window.removeEventListener('mousemove', handleDragMove);
@@ -154,11 +198,19 @@
 				if (handle.includes('w')) nx = resizeStart.elemX + resizeStart.w - nw;
 			}
 		}
-		appStore.updateElement(element.id, { x: nx, y: ny, width: nw, height: nh });
+		// Local update only — no store writes per frame
+		localX = nx; localY = ny; localW = nw; localH = nh;
 		});
 	}
 
 	function handleResizeEnd() {
+		if (resizing && (localX !== null || localW !== null)) {
+			appStore.updateElement(element.id, {
+				x: localX ?? element.x, y: localY ?? element.y,
+				width: localW ?? element.width, height: localH ?? element.height,
+			});
+			localX = null; localY = null; localW = null; localH = null;
+		}
 		resizing = null;
 		window.removeEventListener('mousemove', handleResizeMove);
 		window.removeEventListener('mouseup', handleResizeEnd);
@@ -191,10 +243,14 @@
 		for (const snap of [0, 90, 180, 270, -90, -180, -270, 360]) {
 			if (Math.abs(newRot - snap) < 5) { newRot = snap; break; }
 		}
-		appStore.updateElement(element.id, { rotation: newRot });
+		localRot = newRot;
 	}
 
 	function handleRotateEnd() {
+		if (rotating && localRot !== null) {
+			appStore.updateElement(element.id, { rotation: localRot });
+			localRot = null;
+		}
 		rotating = false;
 		window.removeEventListener('mousemove', handleRotateMove);
 		window.removeEventListener('mouseup', handleRotateEnd);
@@ -205,14 +261,15 @@
 <div
 	bind:this={wrapperEl}
 	class="absolute select-none"
-	style="left:{element.x}px; top:{element.y}px; width:{element.width}px; height:{element.height}px; z-index:{element.zIndex}; transform:rotate({rotation}deg); transform-origin:center center; will-change:{dragging || resizing ? 'transform' : 'auto'};"
+	data-element-id={element.id}
+	style="left:{renderX}px; top:{renderY}px; width:{renderW}px; height:{renderH}px; z-index:{element.zIndex}; transform:rotate({renderRot}deg); transform-origin:center center; will-change:{dragging || resizing ? 'transform' : 'auto'}; content-visibility:auto; contain-intrinsic-size:{element.width}px {element.height}px;"
 	onmousedown={handleMouseDown}
 	ondblclick={handleDblClick}
 	oncontextmenu={handleContextMenuEvt}
 >
 	{#if displaySrc}
-		<img src={displaySrc} alt="" draggable="false"
-			style="pointer-events:none; width:100%; height:100%; border-radius:{appStore.roundedCorners ? '6px' : '0'}; object-fit:contain; image-rendering:pixelated;" />
+		<img src={displaySrc} alt="" draggable="false" loading="lazy" decoding="async"
+			style="pointer-events:none; width:100%; height:100%; border-radius:{appStore.roundedCorners ? '6px' : '0'}; object-fit:contain;" />
 	{:else}
 		<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;border-radius:{appStore.roundedCorners ? '6px' : '0'};background:var(--bg-tertiary);color:var(--text-muted);">
 			Loading...
@@ -238,7 +295,7 @@
 	{#if element.tagIds?.length}
 		<div style="position:absolute;bottom:4px;left:4px;display:flex;gap:3px;pointer-events:none;">
 			{#each element.tagIds as tagId}
-				{@const tag = appStore.tags.find(t => t.id === tagId)}
+				{@const tag = appStore.tagMap.get(tagId)}
 				{#if tag}
 					<div style="width:8px;height:8px;border-radius:50%;background:{tag.color};box-shadow:0 1px 2px rgba(0,0,0,0.3);" title={tag.name}></div>
 				{/if}
@@ -248,7 +305,7 @@
 
 	<!-- Tagging mode highlight -->
 	{#if hasActiveTag}
-		{@const activeTag = appStore.tags.find(t => t.id === appStore.activeTagId)}
+		{@const activeTag = appStore.tagMap.get(appStore.activeTagId ?? '')}
 		<div style="position:absolute;inset:-10px;border-radius:12px;border:10px solid {elementHasActiveTag ? (activeTag?.color ?? '#10b981') : 'rgba(200,200,200,0.2)'};pointer-events:none;transition:border-color 0.15s;{elementHasActiveTag ? `box-shadow:0 0 24px ${activeTag?.color ?? '#10b981'}80;` : ''}"></div>
 	{/if}
 

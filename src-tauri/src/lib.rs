@@ -1,11 +1,21 @@
 mod updater;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use tauri::Manager;
+use std::sync::Mutex;
+use tauri::{Emitter, Manager};
 use uuid::Uuid;
+
+// ── Filesystem watcher state ────────────────────────────────
+
+#[derive(Default)]
+struct WatcherState {
+    watchers: Mutex<HashMap<String, RecommendedWatcher>>,
+}
 
 fn data_dir(app: &tauri::AppHandle) -> PathBuf {
     app.path()
@@ -44,6 +54,8 @@ pub struct AppState {
     pub sidebar_collapsed: Option<bool>,
     #[serde(default)]
     pub zoom_sensitivity: Option<u32>,
+    #[serde(default)]
+    pub gpu_layer: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -332,30 +344,6 @@ fn get_image_path(app: tauri::AppHandle, project_id: String, filename: String) -
         .to_string()
 }
 
-#[tauri::command]
-fn get_image_base64(app: tauri::AppHandle, project_id: String, filename: String) -> Result<String, String> {
-    let path = projects_dir(&app)
-        .join(&project_id)
-        .join("images")
-        .join(&filename);
-    if !path.exists() {
-        return Err("Image not found".to_string());
-    }
-    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("png").to_lowercase();
-    let mime = match ext.as_str() {
-        "jpg" | "jpeg" => "image/jpeg",
-        "png" => "image/png",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        "svg" => "image/svg+xml",
-        "bmp" => "image/bmp",
-        "avif" => "image/avif",
-        _ => "image/png",
-    };
-    Ok(format!("data:{};base64,{}", mime, B64.encode(&bytes)))
-}
-
 // ── Folder scanning ─────────────────────────────────────────
 
 #[tauri::command]
@@ -383,6 +371,58 @@ fn scan_folder_images(path: String) -> Result<Vec<String>, String> {
     walk(&root, &allowed_exts, &mut images);
     images.sort();
     Ok(images)
+}
+
+#[tauri::command]
+fn start_folder_watch(
+    app: tauri::AppHandle,
+    state: tauri::State<WatcherState>,
+    path: String,
+) -> Result<(), String> {
+    let root = PathBuf::from(&path);
+    if !root.is_dir() {
+        return Err(format!("Not a directory: {}", path));
+    }
+    let mut watchers = state
+        .watchers
+        .lock()
+        .map_err(|e| format!("Watcher lock poisoned: {}", e))?;
+    if watchers.contains_key(&path) {
+        return Ok(());
+    }
+    let app_handle = app.clone();
+    let path_for_event = path.clone();
+    let mut watcher = notify::recommended_watcher(
+        move |res: Result<notify::Event, notify::Error>| {
+            if let Ok(event) = res {
+                if matches!(
+                    event.kind,
+                    EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
+                ) {
+                    let _ = app_handle.emit("folder-changed", &path_for_event);
+                }
+            }
+        },
+    )
+    .map_err(|e| e.to_string())?;
+    watcher
+        .watch(&root, RecursiveMode::Recursive)
+        .map_err(|e| e.to_string())?;
+    watchers.insert(path, watcher);
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_folder_watch(
+    state: tauri::State<WatcherState>,
+    path: String,
+) -> Result<(), String> {
+    let mut watchers = state
+        .watchers
+        .lock()
+        .map_err(|e| format!("Watcher lock poisoned: {}", e))?;
+    watchers.remove(&path);
+    Ok(())
 }
 
 #[tauri::command]
@@ -558,6 +598,7 @@ fn install_desktop_file(app: tauri::AppHandle) -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(WatcherState::default())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -585,7 +626,6 @@ pub fn run() {
             delete_image,
             download_image_url,
             get_image_path,
-            get_image_base64,
             export_moo,
             import_moo,
             updater::check_for_updates,
@@ -593,6 +633,8 @@ pub fn run() {
             install_desktop_file,
             scan_folder_images,
             copy_image_from_path,
+            start_folder_watch,
+            stop_folder_watch,
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]
