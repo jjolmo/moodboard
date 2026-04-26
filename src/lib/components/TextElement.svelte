@@ -218,21 +218,21 @@
 	<!-- Resize handles -->
 	{#if isSelected || editing}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div style="position:absolute;left:-5px;top:-5px;width:10px;height:10px;background:var(--ui-accent);border-radius:2px;cursor:nw-resize;" onmousedown={(e) => handleResizeStart(e, 'nw')}></div>
+		<div style="position:absolute;left:-9px;top:-9px;width:18px;height:18px;background:var(--ui-accent);border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.25);border-radius:4px;cursor:nw-resize;" onmousedown={(e) => handleResizeStart(e, 'nw')}></div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div style="position:absolute;right:-5px;top:-5px;width:10px;height:10px;background:var(--ui-accent);border-radius:2px;cursor:ne-resize;" onmousedown={(e) => handleResizeStart(e, 'ne')}></div>
+		<div style="position:absolute;right:-9px;top:-9px;width:18px;height:18px;background:var(--ui-accent);border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.25);border-radius:4px;cursor:ne-resize;" onmousedown={(e) => handleResizeStart(e, 'ne')}></div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div style="position:absolute;left:-5px;bottom:-5px;width:10px;height:10px;background:var(--ui-accent);border-radius:2px;cursor:sw-resize;" onmousedown={(e) => handleResizeStart(e, 'sw')}></div>
+		<div style="position:absolute;left:-9px;bottom:-9px;width:18px;height:18px;background:var(--ui-accent);border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.25);border-radius:4px;cursor:sw-resize;" onmousedown={(e) => handleResizeStart(e, 'sw')}></div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div style="position:absolute;right:-5px;bottom:-5px;width:10px;height:10px;background:var(--ui-accent);border-radius:2px;cursor:se-resize;" onmousedown={(e) => handleResizeStart(e, 'se')}></div>
+		<div style="position:absolute;right:-9px;bottom:-9px;width:18px;height:18px;background:var(--ui-accent);border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.25);border-radius:4px;cursor:se-resize;" onmousedown={(e) => handleResizeStart(e, 'se')}></div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div style="position:absolute;left:-4px;top:50%;transform:translateY(-50%);width:6px;height:20px;background:var(--ui-accent);opacity:0.5;border-radius:3px;cursor:w-resize;" onmousedown={(e) => handleResizeStart(e, 'w')}></div>
+		<div style="position:absolute;left:-6px;top:50%;transform:translateY(-50%);width:12px;height:36px;background:var(--ui-accent);opacity:0.7;border-radius:6px;cursor:w-resize;" onmousedown={(e) => handleResizeStart(e, 'w')}></div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div style="position:absolute;right:-4px;top:50%;transform:translateY(-50%);width:6px;height:20px;background:var(--ui-accent);opacity:0.5;border-radius:3px;cursor:e-resize;" onmousedown={(e) => handleResizeStart(e, 'e')}></div>
+		<div style="position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:12px;height:36px;background:var(--ui-accent);opacity:0.7;border-radius:6px;cursor:e-resize;" onmousedown={(e) => handleResizeStart(e, 'e')}></div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div style="position:absolute;top:-4px;left:50%;transform:translateX(-50%);width:20px;height:6px;background:var(--ui-accent);opacity:0.5;border-radius:3px;cursor:n-resize;" onmousedown={(e) => handleResizeStart(e, 'n')}></div>
+		<div style="position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:36px;height:12px;background:var(--ui-accent);opacity:0.7;border-radius:6px;cursor:n-resize;" onmousedown={(e) => handleResizeStart(e, 'n')}></div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div style="position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);width:20px;height:6px;background:var(--ui-accent);opacity:0.5;border-radius:3px;cursor:s-resize;" onmousedown={(e) => handleResizeStart(e, 's')}></div>
+		<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:36px;height:12px;background:var(--ui-accent);opacity:0.7;border-radius:6px;cursor:s-resize;" onmousedown={(e) => handleResizeStart(e, 's')}></div>
 	{/if}
 
 	<!-- Formatting toolbar (when editing) -->
