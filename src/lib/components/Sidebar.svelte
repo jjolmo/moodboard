@@ -23,9 +23,12 @@
 	function closeContextMenu() { contextMenu = null; showColorPicker = false; tagContextMenu = null; folderContextMenu = null; }
 	function handleRename() {
 		if (!contextMenu || !appStore.activeProject) return;
-		const vibe = appStore.activeProject.vibes.find(v => v.id === contextMenu!.vibeId);
-		if (vibe) { editingId = vibe.id; editingValue = vibe.name; }
+		startEditingVibe(contextMenu.vibeId);
 		contextMenu = null;
+	}
+	function startEditingVibe(vibeId: string) {
+		const vibe = appStore.activeProject?.vibes.find(v => v.id === vibeId);
+		if (vibe) { editingId = vibe.id; editingValue = vibe.name; }
 	}
 	function handleDelete() {
 		if (!contextMenu || !appStore.activeProjectId) return;
@@ -74,9 +77,12 @@
 	}
 	function handleTagRename() {
 		if (!tagContextMenu) return;
-		const tag = appStore.tags.find(t => t.id === tagContextMenu!.tagId);
-		if (tag) { editingTagId = tag.id; editingTagValue = tag.name; }
+		startEditingTag(tagContextMenu.tagId);
 		tagContextMenu = null;
+	}
+	function startEditingTag(tagId: string) {
+		const tag = appStore.tags.find(t => t.id === tagId);
+		if (tag) { editingTagId = tag.id; editingTagValue = tag.name; }
 	}
 	function finishTagEditing() {
 		if (!editingTagId || !editingTagValue.trim()) { editingTagId = null; return; }
@@ -150,6 +156,7 @@
 			<button
 				class="vibe-btn {appStore.activeVibeId === vibe.id && !appStore.tagGridViewId ? 'active' : ''}"
 				onclick={() => appStore.selectVibe(vibe.id)}
+				ondblclick={() => startEditingVibe(vibe.id)}
 				oncontextmenu={(e) => handleContextMenu(e, vibe.id)}>
 				<span class="vibe-dot" style="background:{vibe.color ?? '#6366f1'}"></span>
 				{#if editingId === vibe.id}
@@ -217,6 +224,7 @@
 				<button
 					class="vibe-btn tag-main"
 					onclick={() => appStore.openTagGridView(tag.id)}
+					ondblclick={() => startEditingTag(tag.id)}
 					oncontextmenu={(e) => handleTagContextMenu(e, tag.id)}>
 					<span class="vibe-dot" style="background:{tag.color};border-radius:50%"></span>
 					{#if editingTagId === tag.id}
