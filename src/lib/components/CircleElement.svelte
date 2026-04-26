@@ -135,12 +135,12 @@
 		<div class="pointer-events-none absolute inset-0 rounded border-2 border-accent border-dashed"></div>
 
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="absolute -left-1.5 -top-1.5 h-3 w-3 cursor-nw-resize rounded-sm bg-accent" onmousedown={(e) => handleResizeStart(e, 'nw')}></div>
+		<div style="position:absolute;left:-9px;top:-9px;width:18px;height:18px;background:var(--ui-accent);border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.25);border-radius:4px;cursor:nw-resize;" onmousedown={(e) => handleResizeStart(e, 'nw')}></div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="absolute -right-1.5 -top-1.5 h-3 w-3 cursor-ne-resize rounded-sm bg-accent" onmousedown={(e) => handleResizeStart(e, 'ne')}></div>
+		<div style="position:absolute;right:-9px;top:-9px;width:18px;height:18px;background:var(--ui-accent);border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.25);border-radius:4px;cursor:ne-resize;" onmousedown={(e) => handleResizeStart(e, 'ne')}></div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="absolute -bottom-1.5 -left-1.5 h-3 w-3 cursor-sw-resize rounded-sm bg-accent" onmousedown={(e) => handleResizeStart(e, 'sw')}></div>
+		<div style="position:absolute;left:-9px;bottom:-9px;width:18px;height:18px;background:var(--ui-accent);border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.25);border-radius:4px;cursor:sw-resize;" onmousedown={(e) => handleResizeStart(e, 'sw')}></div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="absolute -bottom-1.5 -right-1.5 h-3 w-3 cursor-se-resize rounded-sm bg-accent" onmousedown={(e) => handleResizeStart(e, 'se')}></div>
+		<div style="position:absolute;right:-9px;bottom:-9px;width:18px;height:18px;background:var(--ui-accent);border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.25);border-radius:4px;cursor:se-resize;" onmousedown={(e) => handleResizeStart(e, 'se')}></div>
 	{/if}
 </div>
