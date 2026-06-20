@@ -251,10 +251,89 @@ fn save_image_bytes(
         fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
     }
 
+    // Pasted PNGs come from the webview's canvas.toBlob(), whose encoder (WebKitGTK)
+    // emits a single monolithic IDAT + fast-zlib stream that strict/older readers
+    // like Photoshop CS6 refuse to open. Re-encode through the `image` crate so the
+    // PNG uses a conventional, libpng-style structure. Other formats pass through.
+    let data = if ext == "png" {
+        reencode_png(&data).unwrap_or(data)
+    } else {
+        data
+    };
+
     let dest = dest_dir.join(&filename);
     fs::write(&dest, &data).map_err(|e| e.to_string())?;
 
     Ok(filename)
+}
+
+/// Decode a PNG and re-encode it with a standard, broadly-compatible structure.
+/// Returns `None` if decoding fails, so the caller keeps the original bytes.
+fn reencode_png(data: &[u8]) -> Option<Vec<u8>> {
+    use image::codecs::png::{CompressionType, FilterType, PngEncoder};
+    use image::{ExtendedColorType, ImageEncoder};
+
+    let img = image::load_from_memory_with_format(data, image::ImageFormat::Png).ok()?;
+    let rgba = img.to_rgba8();
+    let mut out = Vec::new();
+    PngEncoder::new_with_quality(&mut out, CompressionType::Default, FilterType::Adaptive)
+        .write_image(rgba.as_raw(), rgba.width(), rgba.height(), ExtendedColorType::Rgba8)
+        .ok()?;
+    // The `png` crate emits a single monolithic IDAT. Re-chunk it into libpng-sized
+    // 8 KiB pieces so the structure matches what conservative readers (Photoshop CS6)
+    // expect — same proven-good layout as a libpng/Pillow re-save.
+    Some(rechunk_idat(&out))
+}
+
+/// Rewrite a PNG so its IDAT payload is split into multiple 8 KiB chunks, like libpng.
+/// Non-IDAT chunks are copied verbatim; the concatenated IDAT data is unchanged, so
+/// the decoded image is identical. Falls back to the input on any parse anomaly.
+fn rechunk_idat(png: &[u8]) -> Vec<u8> {
+    const IDAT_CHUNK: usize = 8192;
+    if png.len() < 8 || &png[..8] != b"\x89PNG\r\n\x1a\n" {
+        return png.to_vec();
+    }
+    let mut out = Vec::with_capacity(png.len());
+    out.extend_from_slice(&png[..8]);
+    let mut idat = Vec::new();
+    let mut off = 8;
+    while off + 8 <= png.len() {
+        let len = u32::from_be_bytes([png[off], png[off + 1], png[off + 2], png[off + 3]]) as usize;
+        let typ = &png[off + 4..off + 8];
+        let body_end = off + 8 + len;
+        if body_end + 4 > png.len() {
+            return png.to_vec(); // truncated/malformed → don't risk it
+        }
+        let body = &png[off + 8..body_end];
+        if typ == b"IDAT" {
+            idat.extend_from_slice(body);
+        } else {
+            if typ == b"IEND" {
+                for piece in idat.chunks(IDAT_CHUNK) {
+                    write_chunk(&mut out, b"IDAT", piece);
+                }
+                idat.clear();
+            }
+            write_chunk(&mut out, typ, body);
+        }
+        off = body_end + 4; // skip the original CRC
+    }
+    out
+}
+
+/// Append one PNG chunk (length, type, data, CRC32) to `out`.
+fn write_chunk(out: &mut Vec<u8>, typ: &[u8], data: &[u8]) {
+    out.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    out.extend_from_slice(typ);
+    out.extend_from_slice(data);
+    let mut crc = 0xffff_ffffu32;
+    for &b in typ.iter().chain(data) {
+        crc ^= b as u32;
+        for _ in 0..8 {
+            crc = (crc >> 1) ^ (0xedb8_8320 & (!(crc & 1)).wrapping_add(1));
+        }
+    }
+    out.extend_from_slice(&(crc ^ 0xffff_ffff).to_be_bytes());
 }
 
 #[tauri::command]
