@@ -838,6 +838,34 @@ function copyAsReference(): void {
 	clipboard = { elements: refs, isCut: false };
 }
 
+// ── Image download / clipboard ──────────────────────────────
+
+async function downloadImage(elementId: string): Promise<void> {
+	const el = elements.find((e) => e.id === elementId);
+	if (!el || el.type !== 'image' || !activeProjectId) return;
+	const { filename } = el.data as MoodImageData;
+	const srcPath = await invoke<string>('get_image_path', { projectId: activeProjectId, filename });
+	const { save } = await import('@tauri-apps/plugin-dialog');
+	const dest = await save({ defaultPath: filename, title: 'Save image' });
+	if (!dest) return;
+	const { readFile, writeFile } = await import('@tauri-apps/plugin-fs');
+	const bytes = await readFile(srcPath);
+	await writeFile(dest, bytes);
+}
+
+async function copyImageToClipboard(elementId: string): Promise<void> {
+	const el = elements.find((e) => e.id === elementId);
+	if (!el || el.type !== 'image' || !activeProjectId) return;
+	const { filename } = el.data as MoodImageData;
+	const srcPath = await invoke<string>('get_image_path', { projectId: activeProjectId, filename });
+	const { readFile } = await import('@tauri-apps/plugin-fs');
+	const { Image } = await import('@tauri-apps/api/image');
+	const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+	const bytes = await readFile(srcPath);
+	const image = await Image.fromBytes(bytes);
+	await writeImage(image);
+}
+
 // ── Watched folders ─────────────────────────────────────────
 
 const watchedFolders = $derived(activeProject?.watchedFolders ?? []);
@@ -1083,7 +1111,7 @@ export const appStore = {
 	setTheme, toggleSettings, exportMoo, importMoo,
 	createTag, deleteTag, renameTag, updateTagColor, setActiveTag, toggleTagOnElement,
 	openTagGridView, closeTagGridView, getTaggedImages, getTagUsageCount,
-	copyAsReference, safeDeleteImageFiles, countFilenameUsages,
+	copyAsReference, downloadImage, copyImageToClipboard, safeDeleteImageFiles, countFilenameUsages,
 	get watchedFolders() { return watchedFolders; },
 	addWatchedFolder, removeWatchedFolder, syncWatchedFolder, syncAllWatchedFolders
 };
