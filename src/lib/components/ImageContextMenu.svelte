@@ -23,6 +23,20 @@
 				}}>
 				Copy as reference
 			</button>
+			<button class="ctx-btn"
+				onclick={() => {
+					appStore.copyImageToClipboard(menu.elementId).catch(console.error);
+					appStore.closeImageContextMenu();
+				}}>
+				Copy to clipboard
+			</button>
+			<button class="ctx-btn"
+				onclick={() => {
+					appStore.downloadImage(menu.elementId).catch(console.error);
+					appStore.closeImageContextMenu();
+				}}>
+				Download image…
+			</button>
 		{/if}
 		<button class="ctx-btn ctx-danger"
 			onclick={() => {
